@@ -1,0 +1,1 @@
+export const fileToBase64=async(uri:string)=>{const r=await fetch(uri);const b=await r.blob();return await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve((reader.result as string).split(',')[1]||'');reader.onerror=reject;reader.readAsDataURL(b);});};

@@ -1,0 +1,29 @@
+import axios from 'axios';
+import { Alert } from 'react-native';
+import { getCurrentUserToken } from './supabase';
+import * as Linking from 'expo-linking';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const api = axios.create({ baseURL: API_URL, timeout: 12000 });
+
+api.interceptors.request.use(async (c) => {
+  const t = await getCurrentUserToken();
+  if (t) c.headers.Authorization = `Bearer ${t}`;
+  return c;
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  async (err) => {
+    if (err.response?.status === 401) {
+      Alert.alert('Session expired', 'Please log in again.', [
+        { text: 'OK', onPress: () => Linking.openURL('/login') },
+      ]);
+    } else if (!err.response) {
+      Alert.alert('Network Error', 'Please check your internet connection.');
+    }
+    return Promise.reject(err);
+  }
+);
+
+export default api;

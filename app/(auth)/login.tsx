@@ -36,23 +36,15 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSignup = () => {
-    router.push('/(auth)/signup');
-  };
-
   return (
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <KeyboardAvoidingView
         style={s.inner}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Logo */}
         <Text style={s.logoSmall}>FaceTag</Text>
-
-        {/* Form */}
         <View style={s.form}>
           <Text style={s.title}>Welcome back</Text>
-
           <TextInput
             id="login-email-input"
             style={s.input}
@@ -64,7 +56,6 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCorrect={false}
           />
-
           <TextInput
             id="login-password-input"
             style={s.input}
@@ -74,7 +65,6 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry
           />
-
           <Pressable id="login-submit-button" onPress={handleLogin} disabled={loading}>
             <LinearGradient
               colors={[colors.accentFrom, colors.accentTo]}
@@ -85,14 +75,11 @@ export default function LoginScreen() {
               <Text style={s.buttonText}>{loading ? 'Signing in…' : 'Sign in'}</Text>
             </LinearGradient>
           </Pressable>
-
           {error ? <Text style={s.error}>{error}</Text> : null}
         </View>
-
-        {/* Bottom link */}
         <Text style={s.switchText}>
           Don't have an account?{' '}
-          <Text style={s.switchLink} onPress={handleSignup}>
+          <Text style={s.switchLink} onPress={() => router.push('/(auth)/signup')}>
             Sign up
           </Text>
         </Text>
@@ -102,68 +89,19 @@ export default function LoginScreen() {
 }
 
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  inner: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'space-between',
-  },
-  logoSmall: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bold,
-    fontSize: 20,
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  form: {
-    gap: 14,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bold,
-    fontSize: 28,
-    marginBottom: 6,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'space-between' },
+  logoSmall: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 20, textAlign: 'center', marginTop: 20 },
+  form: { gap: 14 },
+  title: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 28, marginBottom: 6 },
   input: {
-    backgroundColor: colors.surface2,
-    borderRadius: 12,
-    height: 52,
-    paddingHorizontal: 16,
-    color: colors.textPrimary,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    backgroundColor: colors.surface2, borderRadius: 12, height: 52, paddingHorizontal: 16,
+    color: colors.textPrimary, fontFamily: fonts.regular, fontSize: 15,
+    borderWidth: 1, borderColor: 'transparent',
   },
-  button: {
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: colors.textPrimary,
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-  },
-  error: {
-    color: colors.danger,
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  switchText: {
-    color: colors.textSecondary,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  switchLink: {
-    color: colors.accent,
-    fontFamily: fonts.semibold,
-  },
+  button: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 16 },
+  error: { color: colors.danger, fontFamily: fonts.regular, fontSize: 13, textAlign: 'center' },
+  switchText: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 15, textAlign: 'center', marginBottom: 16 },
+  switchLink: { color: colors.accent, fontFamily: fonts.semibold },
 });

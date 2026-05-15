@@ -21,7 +21,6 @@ import Input from '@/components/UI/Input';
 import { useToast } from '@/components/UI/Toast';
 import { useAuth, getStoredUsername, saveUsername } from '@/hooks/useAuth';
 import { colors, fonts } from '@/constants/theme';
-import { getCurrentUserToken } from '@/services/supabase';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -32,7 +31,7 @@ interface ProfileData {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const { showToast } = useToast();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -51,7 +50,7 @@ export default function ProfileScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       const headers = { Authorization: `Bearer ${token}` };
 
       // Fetch stats first
@@ -91,7 +90,7 @@ export default function ProfileScreen() {
   const saveEdit = async () => {
     setSaving(true);
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       await axios.put(
         `${API_URL}/api/users/profile`,
         { fullName: editName, bio: editBio, username: editUsername },
@@ -112,7 +111,7 @@ export default function ProfileScreen() {
 
   const togglePublic = async (val: boolean) => {
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       await axios.put(
         `${API_URL}/api/users/profile`,
         { isPublic: val },

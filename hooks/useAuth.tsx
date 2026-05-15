@@ -1,17 +1,32 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { supabase } from '../services/supabase';
-import type { Session, User } from '@supabase/supabase-js';
+import {
+  useAuth as useClerkAuth,
+  useUser as useClerkUser,
+  useSignIn,
+  useSignUp,
+} from '@clerk/expo';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  fullName?: string;
+};
+
+type SignInFn = (email: string, password: string) => Promise<void>;
+type SignUpFn = (email: string, password: string, username: string, fullName?: string) => Promise<{ needsVerification: boolean }>;
+type VerifyEmailFn = (code: string) => Promise<void>;
+
 type AuthContextValue = {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
+  signIn: SignInFn;
+  signUp: SignUpFn;
+  verifySignUpEmail: VerifyEmailFn;
   signOut: () => Promise<void>;
+  getToken: () => Promise<string | null>;
 };
 
 // ─── Context ───────────────────────────────────────────────────────────────────
@@ -37,65 +52,100 @@ async function clearStoredUsername(): Promise<void> {
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isLoaded: isAuthLoaded, isSignedIn, signOut: clerkSignOut, getToken: clerkGetToken } = useClerkAuth();
+  const { isLoaded: isUserLoaded, user: clerkUser } = useClerkUser();
+  const { signIn: clerkSignIn } = useSignIn();
+  const { signUp: clerkSignUp } = useSignUp();
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setIsLoading(false);
-    }, 5000);
+  const isLoading = !isAuthLoaded || !isUserLoaded;
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session: s } }) => {
-        clearTimeout(timeout);
-        setSession(s);
-        setUser(s?.user ?? null);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        clearTimeout(timeout);
-        setSession(null);
-        setUser(null);
-        setIsLoading(false);
-      });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setIsLoading(false);
-    });
-
-    return () => {
-      clearTimeout(timeout);
-      subscription.unsubscribe();
+  const user: AuthUser | null = useMemo(() => {
+    if (!isSignedIn || !clerkUser) return null;
+    return {
+      id: clerkUser.id,
+      email: clerkUser.primaryEmailAddress?.emailAddress || '',
+      fullName: clerkUser.fullName || undefined,
     };
-  }, []);
+  }, [isSignedIn, clerkUser]);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
+  // ─── Sign In ───────────────────────────────────────────────────────────
+  // Uses signIn.create() which combines identifier + password in one step.
+  const signIn: SignInFn = async (email, password) => {
+    let error;
+    try {
+      await clerkSignIn.create({ identifier: email, password });
+    } catch (e: any) {
+      error = e.errors ? e.errors[0] : e;
+    }
+
+    if (error) {
+      throw new Error(error.longMessage || error.message || 'Sign in failed');
+    }
+
+    if (clerkSignIn.status === 'complete') {
+      return;
+    }
+
+    // If MFA is needed (needs_second_factor)
+    if (clerkSignIn.status === 'needs_second_factor') {
+      throw new Error('Multi-factor authentication is required but not yet supported in this app.');
+    }
+
+    throw new Error('Sign in requires additional steps. Status: ' + clerkSignIn.status);
   };
 
-  const signUp = async (email: string, password: string, _fullName?: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw new Error(error.message);
+  // ─── Sign Up ───────────────────────────────────────────────────────────
+  // Step 1: signUp.create() → sends credentials
+  // Step 2: signUp.verifications.sendEmailCode() → sends verification email
+  // Returns { needsVerification: true } so the UI shows the code input
+  const signUp: SignUpFn = async (email, password, username, fullName) => {
+    const params: any = { emailAddress: email, password, username };
+    if (fullName) {
+      params.firstName = fullName.split(' ')[0] || '';
+      params.lastName = fullName.split(' ').slice(1).join(' ') || '';
+    }
+
+    let error;
+    try {
+      // Use create() which is the standard Clerk method for sign up
+      await clerkSignUp.create(params);
+    } catch (e: any) {
+      error = e.errors ? e.errors[0] : e;
+    }
+
+    if (error) {
+      throw new Error(error.longMessage || error.message || 'Sign up failed');
+    }
+
+    // After create step, send email verification code
+    await clerkSignUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+    return { needsVerification: true };
   };
 
+  // ─── Verify Sign-Up Email ───────────────────────────────────────────────
+  const verifySignUpEmail: VerifyEmailFn = async (code) => {
+    await clerkSignUp.attemptEmailAddressVerification({ code });
+    if (clerkSignUp.status === 'complete') {
+      await clerkSignUp.createdSessionId;
+      // Note: Clerk will automatically sign in the user via the session
+    } else {
+      throw new Error('Email verification did not complete sign-up. Status: ' + clerkSignUp.status);
+    }
+  };
+
+  // ─── Sign Out ──────────────────────────────────────────────────────────
   const signOut = async () => {
     await clearStoredUsername();
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(error.message);
-    setUser(null);
-    setSession(null);
+    await clerkSignOut();
+  };
+
+  const getToken = async (): Promise<string | null> => {
+    return clerkGetToken();
   };
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, session, isLoading, signIn, signUp, signOut }),
-    [user, session, isLoading],
+    () => ({ user, isLoading, signIn, signUp, verifySignUpEmail, signOut, getToken }),
+    [user, isLoading, clerkSignIn, clerkSignUp],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

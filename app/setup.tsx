@@ -20,7 +20,6 @@ import Button from '@/components/UI/Button';
 import Avatar from '@/components/UI/Avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { colors, fonts } from '@/constants/theme';
-import { getCurrentUserToken } from '@/services/supabase';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -34,7 +33,7 @@ const PLATFORMS = [
 
 export default function SetupScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -52,7 +51,8 @@ export default function SetupScreen() {
   useEffect(() => {
     const emailPrefix = user?.email?.split('@')[0]?.toLowerCase()?.replace(/[^a-z0-9_]/g, '_') || '';
     setUsername(emailPrefix);
-  }, [user?.email]);
+    if (user?.fullName) setFullName(user.fullName);
+  }, [user?.email, user?.fullName]);
 
   const checkUsername = useCallback(
     (value: string) => {
@@ -66,7 +66,7 @@ export default function SetupScreen() {
       setUsernameStatus('checking');
       debounceRef.current = setTimeout(async () => {
         try {
-          const token = await getCurrentUserToken();
+          const token = await getToken();
           const { data } = await axios.get(`${API_URL}/api/users/${clean}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -113,10 +113,10 @@ export default function SetupScreen() {
 
     setSaving(true);
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
 
       await axios.put(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/users/profile`,
+        `${API_URL}/api/users/profile`,
         {
           fullName: fullName.trim(),
           username: username.trim(),
@@ -130,7 +130,7 @@ export default function SetupScreen() {
         },
       );
 
-      await SecureStore.setItemAsync('username', username.trim());
+      await SecureStore.setItemAsync('facetag_username', username.trim());
       router.replace('/(tabs)/scanner');
     } catch (e: any) {
       const msg = e.response?.data?.error || e.message || 'Could not save profile';

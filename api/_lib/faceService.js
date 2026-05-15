@@ -1,28 +1,20 @@
-require('dotenv').config();
-const axios = require('axios');
-const sharp = require('sharp');
+import axios from 'axios';
 
 const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
 const CLIP_URL = 'https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32';
 
-let modelsReady = false;
-
-async function initModels() {
-  if (!HF_API_KEY || HF_API_KEY.includes('your_token')) {
-    console.warn('[FaceService] HUGGINGFACE_API_KEY not set - face matching disabled');
-    modelsReady = false;
-    return;
-  }
-
-  console.log('[FaceService] Using HuggingFace CLIP model for face embeddings');
-  modelsReady = true;
+export function isReady() {
+  return !!(HF_API_KEY && !HF_API_KEY.includes('your_token'));
 }
 
-async function extractFaceEmbedding(imageBase64) {
-  if (!modelsReady) throw new Error('Face service not ready');
+export async function extractFaceEmbedding(imageBase64) {
+  if (!isReady()) throw new Error('Face service not ready');
 
   const normalizedBase64 = (imageBase64 || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
   const inputBuffer = Buffer.from(normalizedBase64, 'base64');
+
+  // Dynamically import sharp (Vercel bundles it natively)
+  const sharp = (await import('sharp')).default;
 
   const resizedBuffer = await sharp(inputBuffer)
     .resize(224, 224, { fit: 'cover' })
@@ -33,7 +25,6 @@ async function extractFaceEmbedding(imageBase64) {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await axios.post(CLIP_URL, resizedBuffer, {
-        method: 'POST',
         headers: {
           Authorization: `Bearer ${HF_API_KEY}`,
           'Content-Type': 'application/octet-stream',
@@ -70,7 +61,7 @@ async function extractFaceEmbedding(imageBase64) {
   throw lastError || new Error('Failed to extract face embedding');
 }
 
-function cosineSimilarity(a, b) {
+export function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
 
   let dot = 0;
@@ -86,14 +77,3 @@ function cosineSimilarity(a, b) {
   if (normA === 0 || normB === 0) return 0;
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
-
-function isReady() {
-  return modelsReady;
-}
-
-module.exports = {
-  initModels,
-  extractFaceEmbedding,
-  cosineSimilarity,
-  isReady,
-};

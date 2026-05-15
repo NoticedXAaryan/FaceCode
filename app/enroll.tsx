@@ -20,7 +20,7 @@ import FaceFrame from '@/components/Scanner/FaceFrame';
 import Button from '@/components/UI/Button';
 import { useToast } from '@/components/UI/Toast';
 import { colors, fonts } from '@/constants/theme';
-import { getCurrentUserToken } from '@/services/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PREVIEW_W = SCREEN_W - 48;
@@ -37,6 +37,7 @@ const LOADING_MESSAGES = [
 export default function EnrollScreen() {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { getToken } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -78,7 +79,7 @@ export default function EnrollScreen() {
     setError('');
 
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       await axios.post(
         `${API_URL}/api/users/enroll-face`,
         { imageBase64: base64 },
@@ -143,7 +144,7 @@ export default function EnrollScreen() {
       <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <StatusBar style="light" />
         <View style={s.permBox}>
-          <Text style={s.permIcon}>dY"u</Text>
+          <Text style={s.permIcon}>📷</Text>
           <Text style={s.permTitle}>Camera access needed</Text>
           <Text style={s.permSub}>
             FaceTag needs your camera to capture your face for enrollment.

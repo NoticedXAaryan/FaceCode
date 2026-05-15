@@ -11,7 +11,7 @@ import Button from '@/components/UI/Button';
 import FaceFrame from '@/components/Scanner/FaceFrame';
 import MatchBottomSheet from '@/components/Scanner/MatchBottomSheet';
 import { colors, fonts } from '@/constants/theme';
-import { getCurrentUserToken } from '@/services/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -20,6 +20,7 @@ type ScanStatus = 'idle' | 'scanning' | 'detecting' | 'matched';
 export default function ScannerScreen() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
+  const { getToken } = useAuth();
 
   const cameraRef = useRef<CameraView | null>(null);
   const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -63,7 +64,7 @@ export default function ScannerScreen() {
         return;
       }
 
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       const response = await axios.post(
         `${API_URL}/api/scan/match`,
         { imageBase64: photo.base64 },
@@ -144,7 +145,7 @@ export default function ScannerScreen() {
     return (
       <View style={[s.permRoot, { paddingTop: insets.top }]}> 
         <StatusBar style="light" />
-        <Text style={s.permIcon}>dY"u</Text>
+        <Text style={s.permIcon}>📷</Text>
         <Text style={s.permTitle}>Camera access needed</Text>
         <Text style={s.permSub}>FaceTag needs your camera to scan faces.</Text>
         <Button title="Allow camera" onPress={requestPermission} />

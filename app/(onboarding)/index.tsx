@@ -25,7 +25,7 @@ export default function Onboarding() {
   return (
     <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.top}><Text /><Text style={s.skip} onPress={() => router.replace('/(auth)/login')}>Skip</Text></View>
-      <PanGestureHandler onEnded={(e) => onSwipe(e.nativeEvent.translationX)}>
+      <PanGestureHandler onEnded={(e) => onSwipe(e.nativeEvent.translationX as number)}>
         <View style={s.slide}>
           <View style={s.circle}><Text style={s.icon}>{current.icon}</Text></View>
           <Text style={s.title}>{current.title}</Text>

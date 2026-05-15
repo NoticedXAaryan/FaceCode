@@ -19,7 +19,6 @@ import Avatar from '@/components/UI/Avatar';
 import Button from '@/components/UI/Button';
 import { useToast } from '@/components/UI/Toast';
 import { useAuth, getStoredUsername } from '@/hooks/useAuth';
-import { supabase, getCurrentUserToken } from '@/services/supabase';
 import { colors, fonts } from '@/constants/theme';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -58,7 +57,7 @@ function Row({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
+  const { user, signOut, getToken } = useAuth();
   const { showToast } = useToast();
 
   const [username, setUsername] = useState('');
@@ -72,7 +71,7 @@ export default function SettingsScreen() {
       if (stored) setUsername(stored);
       // Try to load profile info
       try {
-        const token = await getCurrentUserToken();
+        const token = await getToken();
         if (stored) {
           const { data } = await axios.get(`${API_URL}/api/users/${stored}`, { timeout: 8000 });
           const p = data.user || data;
@@ -86,7 +85,7 @@ export default function SettingsScreen() {
 
   const updatePrivacy = async (key: string, val: boolean) => {
     try {
-      const token = await getCurrentUserToken();
+      const token = await getToken();
       await axios.put(
         `${API_URL}/api/users/profile`,
         { isPublic: val },
@@ -111,18 +110,12 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = () => {
-    if (!user?.email) return;
-    Alert.alert('Reset Password', `Send a reset email to ${user.email}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Send',
-        onPress: async () => {
-          const { error } = await supabase.auth.resetPasswordForEmail(user.email!);
-          if (error) showToast(error.message, 'error');
-          else showToast('Reset email sent!', 'success');
-        },
-      },
-    ]);
+    // Clerk handles password management — open Clerk's account portal or show info
+    Alert.alert(
+      'Change Password',
+      'Password management is handled by your account provider. Please use the forgot password option on the login screen.',
+      [{ text: 'OK' }],
+    );
   };
 
   const handleDeleteFace = () => {
@@ -133,7 +126,7 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            const token = await getCurrentUserToken();
+            const token = await getToken();
             await axios.delete(`${API_URL}/api/users/face`, {
               headers: { Authorization: `Bearer ${token}` },
             });
@@ -160,7 +153,7 @@ export default function SettingsScreen() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  const token = await getCurrentUserToken();
+                  const token = await getToken();
                   await axios.delete(`${API_URL}/api/users/account`, {
                     headers: { Authorization: `Bearer ${token}` },
                   });

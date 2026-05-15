@@ -5,6 +5,7 @@ import {
   useUser as useClerkUser,
   useSignIn,
   useSignUp,
+  useSSO,
 } from '@clerk/expo';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ type AuthContextValue = {
   isLoading: boolean;
   signIn: SignInFn;
   signUp: SignUpFn;
+  signInWithGoogle: () => Promise<void>;
   verifySignUpEmail: VerifyEmailFn;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
@@ -56,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { isLoaded: isUserLoaded, user: clerkUser } = useClerkUser();
   const { signIn: clerkSignIn } = useSignIn();
   const { signUp: clerkSignUp } = useSignUp();
+  const { startSSOFlow } = useSSO();
 
   const isLoading = !isAuthLoaded || !isUserLoaded;
 
@@ -93,15 +96,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     throw new Error('Sign in requires additional steps. Status: ' + clerkSignIn.status);
   };
 
+  // ─── Google Sign In ────────────────────────────────────────────────────
+  const signInWithGoogle = async () => {
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({ strategy: 'oauth_google' });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        return;
+      }
+      throw new Error('Google sign-in was cancelled or could not be completed.');
+    } catch (e: any) {
+      const err = e.errors ? e.errors[0] : e;
+      throw new Error(err.longMessage || err.message || 'Google sign-in failed');
+    }
+  };
+
   // ─── Sign Up ───────────────────────────────────────────────────────────
   // Step 1: signUp.create() → sends credentials
   // Step 2: signUp.sendEmailCode() → sends verification email
   // Returns { needsVerification: true } so the UI shows the code input
   const signUp: SignUpFn = async (email, password, username, fullName) => {
-    const params: any = { emailAddress: email, password, username };
+    const autoUsername =
+      username ||
+      email
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '_')
+        .slice(0, 20) ||
+      'user';
+
+    const params: any = { emailAddress: email, password, username: autoUsername };
     if (fullName) {
-      params.firstName = fullName.split(' ')[0] || '';
-      params.lastName = fullName.split(' ').slice(1).join(' ') || '';
+      const parts = fullName.trim().split(' ');
+      if (parts[0]) params.firstName = parts[0];
+      if (parts.length > 1) params.lastName = parts.slice(1).join(' ');
     }
 
     try {
@@ -139,6 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (clerkSignUp.status === 'complete') {
       await clerkSignUp.createdSessionId;
       // Note: Clerk will automatically sign in the user via the session
+    } else if (clerkSignUp.status === 'missing_requirements') {
+      const missing = clerkSignUp.missingFields ? clerkSignUp.missingFields.join(', ') : 'unknown fields';
+      throw new Error(`Missing requirements: ${missing}. Please provide these fields.`);
     } else {
       throw new Error('Email verification did not complete sign-up. Status: ' + clerkSignUp.status);
     }
@@ -155,8 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, signIn, signUp, verifySignUpEmail, signOut, getToken }),
-    [user, isLoading, clerkSignIn, clerkSignUp],
+    () => ({ user, isLoading, signIn, signUp, signInWithGoogle, verifySignUpEmail, signOut, getToken }),
+    [user, isLoading, clerkSignIn, clerkSignUp, startSSOFlow],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

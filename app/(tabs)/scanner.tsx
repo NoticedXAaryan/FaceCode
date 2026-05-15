@@ -12,6 +12,7 @@ import FaceFrame from '@/components/Scanner/FaceFrame';
 import MatchBottomSheet from '@/components/Scanner/MatchBottomSheet';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 
@@ -46,8 +47,20 @@ export default function ScannerScreen() {
     }
   }, []);
 
+  const faceCheckEnabled = permission?.granted && !isMatchFound && status !== 'matched';
+  const { faceDetected, faceReady } = useLiveFaceDetection(cameraRef, {
+    enabled: faceCheckEnabled,
+    intervalMs: 500,
+  });
+  const faceInFrameRef = useRef(false);
+  faceInFrameRef.current = faceReady;
+
   const scanOnce = useCallback(async () => {
     if (!cameraRef.current || isMatchFound || isScanningRef.current) return;
+    if (!faceInFrameRef.current) {
+      setStatus('idle');
+      return;
+    }
 
     isScanningRef.current = true;
     setStatus('detecting');
@@ -134,11 +147,15 @@ export default function ScannerScreen() {
   const frameStatus =
     status === 'matched' ? 'matched' :
     status === 'detecting' ? 'detecting' :
+    faceReady ? 'detecting' :
+    faceDetected ? 'scanning' :
     'idle';
 
   const statusText =
     status === 'detecting' ? 'Searching...' :
     status === 'matched' ? '' :
+    faceReady ? 'Scanning…' :
+    faceDetected ? 'Hold still…' :
     'Point at a face';
 
   if (!permission?.granted) {

@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { theme } from '@/constants/theme';
 
-type Status = 'idle' | 'detecting' | 'matched' | 'notfound';
+type Status = 'idle' | 'scanning' | 'detecting' | 'matched' | 'notfound';
 
 export default function FaceFrame({ status }: { status: Status }) {
   const pulse = useSharedValue(1);
@@ -10,6 +10,11 @@ export default function FaceFrame({ status }: { status: Status }) {
   const translateX = useSharedValue(0);
   const scanY = useSharedValue(0);
 
+  if (status === 'scanning') {
+    pulse.value = 1;
+    opacity.value = withRepeat(withTiming(0.65, { duration: 800 }), -1, true);
+    scanY.value = 0;
+  }
   if (status === 'detecting') {
     pulse.value = withRepeat(withTiming(1.02, { duration: 650 }), -1, true);
     opacity.value = withRepeat(withTiming(0.5, { duration: 650 }), -1, true);

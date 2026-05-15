@@ -11,28 +11,49 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import GoogleButton from '@/components/Auth/GoogleButton';
 import { useAuth } from '@/hooks/useAuth';
+import { getPostAuthRoute } from '@/services/onboarding';
 import { colors, fonts } from '@/constants/theme';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle, getToken } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const finishAuth = async () => {
+    const route = await getPostAuthRoute(getToken);
+    router.replace(route as any);
+  };
 
   const handleLogin = async () => {
     setError('');
     setLoading(true);
     try {
       await signIn(email, password);
-      router.replace('/(tabs)/scanner');
+      await finishAuth();
     } catch (e: any) {
       setError(e.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+      await finishAuth();
+    } catch (e: any) {
+      setError(e.message || 'Google sign-in failed.');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -45,6 +66,15 @@ export default function LoginScreen() {
         <Text style={s.logoSmall}>FaceTag</Text>
         <View style={s.form}>
           <Text style={s.title}>Welcome back</Text>
+
+          <GoogleButton onPress={handleGoogle} loading={googleLoading} />
+
+          <View style={s.dividerRow}>
+            <View style={s.dividerLine} />
+            <Text style={s.dividerText}>or</Text>
+            <View style={s.dividerLine} />
+          </View>
+
           <TextInput
             id="login-email-input"
             style={s.input}
@@ -65,7 +95,7 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry
           />
-          <Pressable id="login-submit-button" onPress={handleLogin} disabled={loading}>
+          <Pressable id="login-submit-button" onPress={handleLogin} disabled={loading || googleLoading}>
             <LinearGradient
               colors={[colors.accentFrom, colors.accentTo]}
               start={{ x: 0, y: 0 }}
@@ -94,6 +124,9 @@ const s = StyleSheet.create({
   logoSmall: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 20, textAlign: 'center', marginTop: 20 },
   form: { gap: 14 },
   title: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 28, marginBottom: 6 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.surfaceBorder },
+  dividerText: { color: colors.textTertiary, fontFamily: fonts.regular, fontSize: 13 },
   input: {
     backgroundColor: colors.surface2, borderRadius: 12, height: 52, paddingHorizontal: 16,
     color: colors.textPrimary, fontFamily: fonts.regular, fontSize: 15,

@@ -21,6 +21,7 @@ import Button from '@/components/UI/Button';
 import { useToast } from '@/components/UI/Toast';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { detectFaceInUri, useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PREVIEW_W = SCREEN_W - 48;
@@ -53,6 +54,11 @@ export default function EnrollScreen() {
   const captureAnimated = useAnimatedStyle(() => ({
     transform: [{ scale: captureScale.value }],
   }));
+
+  const scanningEnabled = permission?.granted && !previewUri && !enrolling && !enrolled;
+  const { faceDetected, faceReady, detectorReady, detector } = useLiveFaceDetection(cameraRef, {
+    enabled: scanningEnabled,
+  });
 
   useEffect(() => {
     if (enrolling) {
@@ -112,6 +118,10 @@ export default function EnrollScreen() {
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
+    if (!faceReady) {
+      showToast('Position your face in the frame first', 'error');
+      return;
+    }
 
     setBusy(true);
     setError('');
@@ -120,6 +130,18 @@ export default function EnrollScreen() {
       const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.8 });
       if (!photo?.base64) {
         throw new Error('Could not capture image');
+      }
+
+      if (detectorReady) {
+        const hasFace = await detectFaceInUri(
+          detector,
+          photo.uri,
+          photo.width ?? 640,
+          photo.height ?? 480,
+        );
+        if (!hasFace) {
+          throw new Error('No face detected. Center your face and try again.');
+        }
       }
 
       setPreviewUri(photo.uri);
@@ -176,7 +198,15 @@ export default function EnrollScreen() {
           <CameraView ref={cameraRef} style={s.preview} facing="front" />
         )}
         <View style={s.frameOverlay}>
-          <FaceFrame status={enrolled ? 'matched' : enrolling ? 'detecting' : 'idle'} />
+          <FaceFrame
+            status={
+              enrolled ? 'matched' :
+              enrolling ? 'detecting' :
+              faceReady ? 'detecting' :
+              faceDetected ? 'scanning' :
+              'idle'
+            }
+          />
         </View>
       </View>
 
@@ -198,17 +228,29 @@ export default function EnrollScreen() {
           </View>
         ) : (
           <>
-            <Text style={s.hint}>Position your face in the frame</Text>
+            <Text style={s.hint}>
+              {!detectorReady
+                ? 'Use a development build for live face detection'
+                : faceReady
+                  ? 'Face detected — tap to enroll'
+                  : faceDetected
+                    ? 'Hold still…'
+                    : 'Center your face in the frame'}
+            </Text>
             <Animated.View style={captureAnimated}>
               <Pressable
                 onPress={handleCapture}
-                disabled={busy}
+                disabled={busy || (!faceReady && detectorReady)}
                 onPressIn={() => (captureScale.value = withSpring(0.9))}
                 onPressOut={() => (captureScale.value = withSpring(1))}
-                style={s.captureOuter}
+                style={[s.captureOuter, !faceReady && detectorReady && s.captureDisabled]}
               >
                 <LinearGradient
-                  colors={[colors.accentFrom, colors.accentTo]}
+                  colors={
+                    faceReady || !detectorReady
+                      ? [colors.accentFrom, colors.accentTo]
+                      : [colors.surface2, colors.surface2]
+                  }
                   style={s.captureInner}
                 />
               </Pressable>
@@ -273,6 +315,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   captureInner: { width: 58, height: 58, borderRadius: 29 },
+  captureDisabled: { borderColor: colors.textTertiary, opacity: 0.7 },
   statusBox: { alignItems: 'center', gap: 14 },
   statusText: { color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 15, textAlign: 'center' },
   errorText: { color: colors.danger, fontFamily: fonts.regular, fontSize: 14, textAlign: 'center' },

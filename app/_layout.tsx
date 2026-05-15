@@ -13,13 +13,16 @@ import {
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import { ClerkProvider } from '@clerk/expo';
+import { FaceDetectionProvider } from '@infinitered/react-native-mlkit-face-detection';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/UI/Toast';
 import { colors } from '@/constants/theme';
 
 // Prevent the native splash screen from hiding before we're ready
 SplashScreen.preventAutoHideAsync();
+WebBrowser.maybeCompleteAuthSession();
 
 // ─── Clerk token cache using SecureStore ────────────────────────────────────────
 
@@ -108,9 +111,11 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
         <SafeAreaProvider>
           <AuthProvider>
-            <ToastProvider>
-              <RootNavigator />
-            </ToastProvider>
+            <FaceDetectionProvider options={{ performanceMode: 'fast', minFaceSize: 0.15 }}>
+              <ToastProvider>
+                <RootNavigator />
+              </ToastProvider>
+            </FaceDetectionProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

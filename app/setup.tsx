@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -12,37 +11,23 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import Input from '@/components/UI/Input';
 import Button from '@/components/UI/Button';
 import Avatar from '@/components/UI/Avatar';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, saveUsername } from '@/hooks/useAuth';
 import { colors, fonts } from '@/constants/theme';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
-
-const PLATFORMS = [
-  { key: 'instagram', label: 'Instagram', color: '#E1306C', icon: 'logo-instagram' },
-  { key: 'linkedin', label: 'LinkedIn', color: '#0A66C2', icon: 'logo-linkedin' },
-  { key: 'whatsapp', label: 'WhatsApp', color: '#25D366', icon: 'logo-whatsapp' },
-  { key: 'x', label: 'X (Twitter)', color: '#FFFFFF', icon: 'logo-twitter' },
-  { key: 'website', label: 'Website', color: '#6C5CE7', icon: 'globe-outline' },
-] as const;
 
 export default function SetupScreen() {
   const insets = useSafeAreaInsets();
   const { user, getToken } = useAuth();
 
-  const [fullName, setFullName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
-  const [primary, setPrimary] = useState('instagram');
-  const [links, setLinks] = useState<Record<string, string>>({
-    instagram: '', linkedin: '', whatsapp: '', x: '', website: '',
-  });
+  const [linkUrl, setLinkUrl] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -51,7 +36,7 @@ export default function SetupScreen() {
   useEffect(() => {
     const emailPrefix = user?.email?.split('@')[0]?.toLowerCase()?.replace(/[^a-z0-9_]/g, '_') || '';
     setUsername(emailPrefix);
-    if (user?.fullName) setFullName(user.fullName);
+    if (user?.fullName) setDisplayName(user.fullName);
   }, [user?.email, user?.fullName]);
 
   const checkUsername = useCallback(
@@ -81,19 +66,19 @@ export default function SetupScreen() {
         }
       }, 600);
     },
-    [user?.id],
+    [user?.id, getToken],
   );
 
   const handleSubmit = async () => {
     setFormError('');
 
-    if (!fullName.trim()) {
-      setFormError('Name is required');
+    if (!displayName.trim()) {
+      setFormError('Please enter your name');
       return;
     }
 
     if (!username.trim() || username.trim().length < 3) {
-      setFormError('Username must be at least 3 characters');
+      setFormError('Pick a username (3+ characters)');
       return;
     }
 
@@ -103,13 +88,13 @@ export default function SetupScreen() {
     }
 
     if (usernameStatus === 'taken') {
-      setFormError('Username is taken');
+      setFormError('That username is taken');
       return;
     }
 
-    const formattedLinks = Object.entries(links)
-      .filter(([, url]) => url.trim() !== '')
-      .map(([platform, url]) => ({ platform, url: url.trim() }));
+    const links = linkUrl.trim()
+      ? [{ platform: 'website', url: linkUrl.trim() }]
+      : [];
 
     setSaving(true);
     try {
@@ -118,19 +103,17 @@ export default function SetupScreen() {
       await axios.put(
         `${API_URL}/api/users/profile`,
         {
-          fullName: fullName.trim(),
+          fullName: displayName.trim(),
           username: username.trim(),
-          bio: bio.trim(),
+          bio: '',
           isPublic,
-          primaryLinkPlatform: primary,
-          links: formattedLinks,
+          primaryLinkPlatform: links.length ? 'website' : null,
+          links,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      await SecureStore.setItemAsync('facetag_username', username.trim());
+      await saveUsername(username.trim());
       router.replace('/(tabs)/scanner');
     } catch (e: any) {
       const msg = e.response?.data?.error || e.message || 'Could not save profile';
@@ -140,8 +123,8 @@ export default function SetupScreen() {
     }
   };
 
-  const initials = fullName
-    ? fullName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  const initials = displayName
+    ? displayName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : 'FT';
 
   return (
@@ -156,13 +139,15 @@ export default function SetupScreen() {
             style={[s.progressFill, { width: '100%' }]}
           />
         </View>
-        <Text style={s.stepText}>Step 2 of 2 - Set up Profile</Text>
+        <Text style={s.stepText}>Almost done</Text>
+        <Text style={s.heading}>Quick profile</Text>
+        <Text style={s.subheading}>Just the basics — you can add more later in settings.</Text>
 
         <View style={s.avatarCenter}>
           <Avatar size={72} initials={initials} showRing ringColor="gradient" />
         </View>
 
-        <Input label="Full name" value={fullName} onChangeText={setFullName} />
+        <Input label="Your name" value={displayName} onChangeText={setDisplayName} placeholder="How should people see you?" />
 
         <View>
           <Input
@@ -170,6 +155,7 @@ export default function SetupScreen() {
             value={username}
             onChangeText={checkUsername}
             autoCapitalize="none"
+            placeholder="facetag.me/you"
           />
           {usernameStatus === 'checking' && (
             <View style={s.usernameStatus}>
@@ -185,53 +171,19 @@ export default function SetupScreen() {
         </View>
 
         <Input
-          label="Bio"
-          value={bio}
-          onChangeText={(t) => setBio(t.slice(0, 120))}
-          multiline
+          label="Link (optional)"
+          value={linkUrl}
+          onChangeText={setLinkUrl}
+          placeholder="Instagram, LinkedIn, or any URL"
+          autoCapitalize="none"
+          keyboardType="url"
         />
 
-        <Text style={s.sectionTitle}>Your links</Text>
-        {PLATFORMS.map((p) => {
-          const isPrimary = primary === p.key;
-          return (
-            <View key={p.key} style={[s.linkCard, { borderLeftColor: p.color }]}> 
-              <View style={s.linkHeader}>
-                <Ionicons name={p.icon as any} size={20} color={p.color} />
-                <Text style={s.platformName}>{p.label}</Text>
-                <Pressable onPress={() => setPrimary(p.key)}>
-                  <Text style={[s.starText, isPrimary && s.starActive]}>
-                    {isPrimary ? 'Primary' : 'Set primary'}
-                  </Text>
-                </Pressable>
-              </View>
-              <Input
-                placeholder={`${p.label} URL`}
-                value={links[p.key]}
-                onChangeText={(v) => setLinks((prev) => ({ ...prev, [p.key]: v }))}
-                autoCapitalize="none"
-              />
-            </View>
-          );
-        })}
-
-        <LinearGradient
-          colors={
-            isPublic
-              ? ['rgba(108,92,231,0.15)', 'rgba(131,58,180,0.15)']
-              : [colors.surface, colors.surface]
-          }
-          style={s.privacyCard}
-        >
+        <View style={s.privacyCard}>
           <View style={s.privacyRow}>
-            <Ionicons
-              name={isPublic ? 'lock-open' : 'lock-closed'}
-              size={22}
-              color={isPublic ? colors.accent : colors.textSecondary}
-            />
             <View style={s.privacyInfo}>
-              <Text style={s.privacyTitle}>Make profile public</Text>
-              <Text style={s.privacyDesc}>Anyone with FaceTag can scan your face</Text>
+              <Text style={s.privacyTitle}>Public profile</Text>
+              <Text style={s.privacyDesc}>Let others find you when they scan your face</Text>
             </View>
             <Switch
               value={isPublic}
@@ -240,13 +192,13 @@ export default function SetupScreen() {
               thumbColor={colors.textPrimary}
             />
           </View>
-        </LinearGradient>
+        </View>
 
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      <View style={[s.floatingBtn, { paddingBottom: insets.bottom + 16 }]}> 
-        <Button title="Finish setup" onPress={handleSubmit} loading={saving} disabled={saving} />
+      <View style={[s.floatingBtn, { paddingBottom: insets.bottom + 16 }]}>
+        <Button title="Get started" onPress={handleSubmit} loading={saving} disabled={saving} />
         {formError ? <Text style={s.formError}>{formError}</Text> : null}
       </View>
     </View>
@@ -261,24 +213,17 @@ const s = StyleSheet.create({
   },
   progressFill: { height: 4, borderRadius: 999 },
   stepText: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 12 },
+  heading: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 24 },
+  subheading: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 14, marginBottom: 4 },
   avatarCenter: { alignItems: 'center', paddingVertical: 8 },
-  sectionTitle: {
-    color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 18, marginTop: 12,
-  },
-  linkCard: {
+  privacyCard: {
     backgroundColor: colors.surface,
     borderRadius: 16,
-    padding: 14,
-    gap: 10,
-    borderLeftWidth: 3,
+    padding: 16,
     borderWidth: 0.5,
     borderColor: colors.surfaceBorder,
+    marginTop: 4,
   },
-  linkHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  platformName: { flex: 1, color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 14 },
-  starText: { color: colors.textTertiary, fontFamily: fonts.regular, fontSize: 12 },
-  starActive: { color: '#F5A623' },
-  privacyCard: { borderRadius: 16, padding: 16, borderWidth: 0.5, borderColor: colors.surfaceBorder },
   privacyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   privacyInfo: { flex: 1, gap: 4 },
   privacyTitle: { color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 15 },

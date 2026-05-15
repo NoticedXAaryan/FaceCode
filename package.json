@@ -20,6 +20,7 @@
     "@expo-google-fonts/inter": "^0.2.3",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.2.9",
+    "@infinitered/react-native-mlkit-face-detection": "^5.0.0",
     "@neondatabase/serverless": "^0.10.4",
     "axios": "^1.8.4",
     "expo": "~54.0.34",

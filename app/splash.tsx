@@ -4,22 +4,30 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { colors, fonts } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
+import { getPostAuthRoute } from '@/services/onboarding';
 
 export default function SplashScreen() {
   const insets = useSafeAreaInsets();
   const opacity = useSharedValue(0);
+  const { user, isLoading, getToken } = useAuth();
 
   useEffect(() => {
-    // Fade in over 800ms
     opacity.value = withTiming(1, { duration: 800 });
 
-    // After 2 seconds total, navigate to onboarding
-    const timer = setTimeout(() => {
-      router.replace('/(onboarding)');
+    if (isLoading) return;
+
+    const timer = setTimeout(async () => {
+      if (user) {
+        const route = await getPostAuthRoute(getToken);
+        router.replace(route as '/enroll' | '/setup' | '/(tabs)/scanner');
+      } else {
+        router.replace('/(onboarding)');
+      }
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [isLoading, user, getToken]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

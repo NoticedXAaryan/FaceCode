@@ -6,6 +6,7 @@ import {
   useSignIn,
   useSignUp,
   useSSO,
+  useClerk,
 } from '@clerk/expo';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -54,11 +55,18 @@ async function clearStoredUsername(): Promise<void> {
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { isLoaded: isAuthLoaded, isSignedIn, signOut: clerkSignOut, getToken: clerkGetToken } = useClerkAuth();
+  const { isLoaded: isAuthLoaded, isSignedIn, signOut: clerkSignOut, getToken: clerkGetToken } =
+    useClerkAuth();
   const { isLoaded: isUserLoaded, user: clerkUser } = useClerkUser();
   const { signIn: clerkSignIn } = useSignIn();
   const { signUp: clerkSignUp } = useSignUp();
   const { startSSOFlow } = useSSO();
+  const clerk = useClerk();
+
+  const activateSession = async (sessionId: string | null | undefined) => {
+    if (!sessionId || !clerk.loaded) return;
+    await clerk.setActive({ session: sessionId });
+  };
 
   const isLoading = !isAuthLoaded || !isUserLoaded;
 
@@ -85,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (clerkSignIn.status === 'complete') {
+      await activateSession(clerkSignIn.createdSessionId);
       return;
     }
 
@@ -165,8 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (clerkSignUp.status === 'complete') {
-      await clerkSignUp.createdSessionId;
-      // Note: Clerk will automatically sign in the user via the session
+      await activateSession(clerkSignUp.createdSessionId);
+      return;
     } else if (clerkSignUp.status === 'missing_requirements') {
       const missing = clerkSignUp.missingFields ? clerkSignUp.missingFields.join(', ') : 'unknown fields';
       throw new Error(`Missing requirements: ${missing}. Please provide these fields.`);

@@ -62,28 +62,31 @@ export default function SettingsScreen() {
 
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
-  const [appear, setAppear] = useState(true);
-  const [pub, setPub] = useState(true);
+  const [isPublic, setIsPublic] = useState(true);
 
   useEffect(() => {
     (async () => {
       const stored = await getStoredUsername();
       if (stored) setUsername(stored);
-      // Try to load profile info
       try {
         const token = await getToken();
-        if (stored) {
-          const { data } = await axios.get(`${API_URL}/api/users/${stored}`, { timeout: 8000 });
-          const p = data.user || data;
-          setFullName(p.full_name || '');
-          setAppear(p.is_public ?? true);
-          setPub(p.is_public ?? true);
+        if (!token) return;
+        const { data } = await axios.get(`${API_URL}/api/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 8000,
+        });
+        if (data.username) setUsername(data.username);
+        const p = data.profile;
+        if (p) {
+          setFullName(p.full_name || data.fullName || '');
+          setIsPublic(p.is_public ?? data.isPublic ?? true);
         }
       } catch {}
     })();
   }, []);
 
-  const updatePrivacy = async (key: string, val: boolean) => {
+  const handleTogglePublic = async (val: boolean) => {
+    setIsPublic(val);
     try {
       const token = await getToken();
       await axios.put(
@@ -93,20 +96,9 @@ export default function SettingsScreen() {
       );
       showToast(val ? 'Profile is now public' : 'Profile is now private', 'info');
     } catch {
+      setIsPublic(!val);
       showToast('Could not update setting', 'error');
     }
-  };
-
-  const handleToggleAppear = (val: boolean) => {
-    setAppear(val);
-    setPub(val);
-    updatePrivacy('is_public', val);
-  };
-
-  const handleTogglePublic = (val: boolean) => {
-    setPub(val);
-    setAppear(val);
-    updatePrivacy('is_public', val);
   };
 
   const handleChangePassword = () => {
@@ -206,23 +198,11 @@ export default function SettingsScreen() {
         {/* Privacy */}
         <Text style={s.sectionLabel}>PRIVACY</Text>
         <Row
-          icon="eye-outline"
-          label="Appear in face scans"
-          right={
-            <Switch
-              value={appear}
-              onValueChange={handleToggleAppear}
-              trackColor={{ true: colors.accentMid, false: colors.surface2 }}
-              thumbColor="#fff"
-            />
-          }
-        />
-        <Row
           icon="globe-outline"
-          label="Public profile page"
+          label="Public profile"
           right={
             <Switch
-              value={pub}
+              value={isPublic}
               onValueChange={handleTogglePublic}
               trackColor={{ true: colors.accentMid, false: colors.surface2 }}
               thumbColor="#fff"

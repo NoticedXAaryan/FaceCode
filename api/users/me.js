@@ -14,16 +14,33 @@ export default async function handler(req, res) {
     `;
 
     const profiles = await sql`
-      SELECT username FROM users WHERE id = ${user.id} LIMIT 1
+      SELECT username, full_name, bio, avatar_url, is_public, primary_link_platform
+      FROM users WHERE id = ${user.id} LIMIT 1
     `;
 
-    const username = profiles[0]?.username ?? null;
+    const profile = profiles[0] ?? null;
+    const username = profile?.username ?? null;
     const hasProfile = !!(username && String(username).trim().length >= 3);
+
+    const links = hasProfile
+      ? await sql`
+          SELECT platform, url, display_order FROM social_links
+          WHERE user_id = ${user.id} ORDER BY display_order
+        `
+      : [];
 
     res.json({
       hasFace: faces.length > 0,
       hasProfile,
       username,
+      fullName: profile?.full_name ?? null,
+      isPublic: profile?.is_public ?? true,
+      profile: profile
+        ? {
+            ...profile,
+            links: links || [],
+          }
+        : null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

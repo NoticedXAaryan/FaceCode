@@ -53,18 +53,36 @@ export default function ProfileScreen() {
       const token = await getToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Fetch stats first
-      const statsRes = await axios.get(`${API_URL}/api/users/me/stats`, { headers, timeout: 10000 }).catch(() => null);
-      if (statsRes?.data) setStats(statsRes.data);
+      const [statsRes, meRes] = await Promise.all([
+        axios.get(`${API_URL}/api/users/me/stats`, { headers, timeout: 10000 }).catch(() => null),
+        axios.get(`${API_URL}/api/users/me`, { headers, timeout: 10000 }).catch(() => null),
+      ]);
 
-      // Get stored username
-      const storedUsername = await getStoredUsername();
-      if (storedUsername) {
-        const profileRes = await axios.get(`${API_URL}/api/users/${storedUsername}`, { timeout: 10000 }).catch(() => null);
-        if (profileRes?.data) {
-          const p = profileRes.data.user || profileRes.data;
-          setProfile(p);
-          setLinks(profileRes.data.links || profileRes.data.social_links || []);
+      if (statsRes?.data) {
+        setStats({
+          scanCount: statsRes.data.scanCount ?? 0,
+          views: statsRes.data.views ?? 0,
+          links: statsRes.data.links ?? 0,
+        });
+      }
+
+      const me = meRes?.data;
+      if (me?.profile) {
+        const p = me.profile;
+        setProfile(p);
+        setLinks(p.links || []);
+        if (p.username) await saveUsername(p.username);
+      } else if (me?.username) {
+        const storedUsername = me.username || (await getStoredUsername());
+        if (storedUsername) {
+          const profileRes = await axios
+            .get(`${API_URL}/api/users/${storedUsername}`, { timeout: 10000 })
+            .catch(() => null);
+          if (profileRes?.data) {
+            const p = profileRes.data.user || profileRes.data;
+            setProfile(p);
+            setLinks(profileRes.data.links || profileRes.data.social_links || []);
+          }
         }
       }
     } catch {} finally {

@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { ClerkProvider } from '@clerk/expo';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/UI/Toast';
 import { colors } from '@/constants/theme';
+import { getPostAuthRoute } from '@/services/onboarding';
 
 // Prevent the native splash screen from hiding before we're ready
 SplashScreen.preventAutoHideAsync();
@@ -47,8 +48,10 @@ const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 // ─── Inner navigator that can safely call useAuth() ────────────────────────────
 
 function RootNavigator() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, getToken } = useAuth();
   const router = useRouter();
+  const segments = useSegments();
+  const routedRef = useRef(false);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -67,10 +70,32 @@ function RootNavigator() {
   // Auth-based redirect
   useEffect(() => {
     if (isLoading || !fontsLoaded) return;
+
+    const root = segments[0];
+    const guestAllowed =
+      root === 'splash' ||
+      root === '(onboarding)' ||
+      root === '(auth)' ||
+      root === 'profile';
+
     if (!user) {
-      router.replace('/(auth)/login');
+      routedRef.current = false;
+      if (!guestAllowed) {
+        router.replace('/(auth)/login');
+      }
+      return;
     }
-  }, [isLoading, user, fontsLoaded]);
+
+    const onBootstrap =
+      root === 'splash' || root === '(onboarding)' || root === '(auth)';
+
+    if (onBootstrap && !routedRef.current) {
+      routedRef.current = true;
+      getPostAuthRoute(getToken)
+        .then((route) => router.replace(route as '/enroll' | '/setup' | '/(tabs)/scanner'))
+        .catch(() => router.replace('/(tabs)/scanner'));
+    }
+  }, [isLoading, user, fontsLoaded, segments, getToken, router]);
 
   // Loading gate — show a plain black screen with a spinner
   if (!fontsLoaded || isLoading) {

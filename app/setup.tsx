@@ -54,15 +54,22 @@ export default function SetupScreen() {
           const token = await getToken();
           const { data } = await axios.get(`${API_URL}/api/users/${clean}`, {
             headers: { Authorization: `Bearer ${token}` },
+            validateStatus: (status) => status === 200 || status === 404,
           });
 
-          if (data?.user?.id !== user?.id && data?.id !== user?.id) {
+          if (!data?.user && !data?.username) {
+            setUsernameStatus('available');
+            return;
+          }
+
+          const ownerId = data.user?.id ?? data.id;
+          if (ownerId && ownerId !== user?.id) {
             setUsernameStatus('taken');
           } else {
             setUsernameStatus('available');
           }
         } catch {
-          setUsernameStatus('available');
+          setUsernameStatus('idle');
         }
       }, 600);
     },

@@ -30,7 +30,16 @@ const PLATFORM_ICONS: Record<string, string> = {
 export default function PublicProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const insets = useSafeAreaInsets();
-  const [data, setData] = useState<any>(null);
+  type PublicProfile = {
+    full_name?: string;
+    username?: string;
+    bio?: string;
+    avatar_url?: string;
+    primary_link_platform?: string;
+    links?: { platform: string; url: string }[];
+  };
+
+  const [data, setData] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -40,7 +49,12 @@ export default function PublicProfileScreen() {
     api
       .get(`/api/users/${username}`)
       .then((res) => {
-        setData(res.data);
+        const payload = res.data;
+        const user = payload.user ?? payload;
+        setData({
+          ...user,
+          links: payload.links ?? payload.social_links ?? user.links ?? [],
+        });
         setError('');
       })
       .catch(() => setError('Profile not found or private'))
@@ -102,7 +116,7 @@ export default function PublicProfileScreen() {
 
   // ── Profile card ──────────────────────────────────────────────────
 
-  const linksList = data.links || data.social_links || [];
+  const linksList = data.links || [];
   const primaryPlatform = data.primary_link_platform || linksList[0]?.platform || '';
   const primaryLink = linksList.find((l: any) => l.platform === primaryPlatform) || linksList[0];
 

@@ -34,6 +34,12 @@ export default async function handler(req, res) {
 
     res.json({ success: true, message: 'Face enrolled successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const msg = err.message || 'Enrollment failed';
+    const isClientError =
+      msg.includes('face') ||
+      msg.includes('camera') ||
+      msg.includes('blank') ||
+      msg.includes('Center');
+    res.status(isClientError ? 400 : 500).json({ error: msg });
   }
 }

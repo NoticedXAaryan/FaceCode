@@ -1,6 +1,7 @@
 import sql from '../_lib/db.js';
 import { verifyAuth } from '../_lib/auth.js';
 import { extractFaceEmbedding, cosineSimilarity, isReady } from '../_lib/faceService.js';
+import { validateImageHasSubject } from '../_lib/imageValidation.js';
 
 export const config = {
   api: {
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
+    await validateImageHasSubject(imageBase64);
     const scannedEmbedding = await extractFaceEmbedding(imageBase64);
 
     const embeddings = await sql`SELECT user_id, embedding FROM face_embeddings`;
@@ -41,6 +43,7 @@ export default async function handler(req, res) {
     const THRESHOLD = 0.6;
 
     for (const row of embeddings) {
+      if (row.user_id === user.id) continue;
       const score = cosineSimilarity(scannedEmbedding, row.embedding);
       if (score > bestScore) {
         bestScore = score;
@@ -81,7 +84,16 @@ export default async function handler(req, res) {
       links: links || [],
     });
   } catch (err) {
-    console.error('Scan match error:', err.message);
-    res.status(500).json({ error: err.message });
+    const msg = err.message || 'Scan failed';
+    const isClientError =
+      msg.includes('face') ||
+      msg.includes('camera') ||
+      msg.includes('blank') ||
+      msg.includes('Center');
+    if (isClientError) {
+      return res.status(400).json({ matched: false, error: msg });
+    }
+    console.error('Scan match error:', msg);
+    res.status(500).json({ error: msg });
   }
 }

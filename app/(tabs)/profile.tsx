@@ -22,7 +22,7 @@ import { useToast } from '@/components/UI/Toast';
 import { useAuth, getStoredUsername, saveUsername } from '@/hooks/useAuth';
 import { colors, fonts } from '@/constants/theme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 
 interface ProfileData {
   id?: string; username?: string; full_name?: string; bio?: string;

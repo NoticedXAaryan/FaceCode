@@ -26,7 +26,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const PREVIEW_W = SCREEN_W - 48;
 const PREVIEW_H = 340;
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 
 const LOADING_MESSAGES = [
   'Analyzing your face...',

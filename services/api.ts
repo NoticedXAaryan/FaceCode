@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 const api = axios.create({ baseURL: API_URL, timeout: 12000 });
 
 api.interceptors.response.use(

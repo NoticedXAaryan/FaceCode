@@ -13,7 +13,7 @@ import MatchBottomSheet from '@/components/Scanner/MatchBottomSheet';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 
 type ScanStatus = 'idle' | 'scanning' | 'detecting' | 'matched';
 

@@ -71,15 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ─── Sign In ───────────────────────────────────────────────────────────
   // Uses signIn.create() which combines identifier + password in one step.
   const signIn: SignInFn = async (email, password) => {
-    let error;
     try {
-      await clerkSignIn.create({ identifier: email, password });
+      const result = await clerkSignIn.create({ identifier: email, password });
+      if (result.error) {
+        throw new Error(result.error.longMessage || result.error.message || 'Sign in failed');
+      }
     } catch (e: any) {
-      error = e.errors ? e.errors[0] : e;
-    }
-
-    if (error) {
-      throw new Error(error.longMessage || error.message || 'Sign in failed');
+      const err = e.errors ? e.errors[0] : e;
+      throw new Error(err.longMessage || err.message || 'Sign in failed');
     }
 
     if (clerkSignIn.status === 'complete') {
@@ -96,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ─── Sign Up ───────────────────────────────────────────────────────────
   // Step 1: signUp.create() → sends credentials
-  // Step 2: signUp.verifications.sendEmailCode() → sends verification email
+  // Step 2: signUp.sendEmailCode() → sends verification email
   // Returns { needsVerification: true } so the UI shows the code input
   const signUp: SignUpFn = async (email, password, username, fullName) => {
     const params: any = { emailAddress: email, password, username };
@@ -105,26 +104,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       params.lastName = fullName.split(' ').slice(1).join(' ') || '';
     }
 
-    let error;
     try {
       // Use create() which is the standard Clerk method for sign up
-      await clerkSignUp.create(params);
+      const result = await clerkSignUp.create(params);
+      if (result.error) {
+        throw new Error(result.error.longMessage || result.error.message || 'Sign up failed');
+      }
+      
+      // After create step, send email verification code
+      const codeResult = await clerkSignUp.verifications.sendEmailCode();
+      if (codeResult.error) {
+        throw new Error(codeResult.error.longMessage || codeResult.error.message || 'Failed to send verification code');
+      }
     } catch (e: any) {
-      error = e.errors ? e.errors[0] : e;
+      const err = e.errors ? e.errors[0] : e;
+      throw new Error(err.longMessage || err.message || 'Sign up failed');
     }
 
-    if (error) {
-      throw new Error(error.longMessage || error.message || 'Sign up failed');
-    }
-
-    // After create step, send email verification code
-    await clerkSignUp.prepareEmailAddressVerification({ strategy: 'email_code' });
     return { needsVerification: true };
   };
 
   // ─── Verify Sign-Up Email ───────────────────────────────────────────────
   const verifySignUpEmail: VerifyEmailFn = async (code) => {
-    await clerkSignUp.attemptEmailAddressVerification({ code });
+    try {
+      const result = await clerkSignUp.verifications.verifyEmailCode({ code });
+      if (result.error) {
+        throw new Error(result.error.longMessage || result.error.message || 'Verification failed');
+      }
+    } catch (e: any) {
+      const err = e.errors ? e.errors[0] : e;
+      throw new Error(err.longMessage || err.message || 'Verification failed');
+    }
+
     if (clerkSignUp.status === 'complete') {
       await clerkSignUp.createdSessionId;
       // Note: Clerk will automatically sign in the user via the session

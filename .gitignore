@@ -6,3 +6,10 @@ dist/
 npm-debug.*
 *.log
 .DS_Store
+
+# IDE & AI Metadata
+.agents/
+.claude/
+.cursor/
+.mcp.json
+skills-lock.json

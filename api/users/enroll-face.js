@@ -1,6 +1,7 @@
 import sql from '../_lib/db.js';
 import { verifyAuth } from '../_lib/auth.js';
 import { extractFaceEmbedding, isReady } from '../_lib/faceService.js';
+import { validateImageHasSubject } from '../_lib/imageValidation.js';
 
 export const config = {
   api: {
@@ -25,6 +26,7 @@ export default async function handler(req, res) {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
+    await validateImageHasSubject(imageBase64);
     const embedding = await extractFaceEmbedding(imageBase64);
 
     await sql`DELETE FROM face_embeddings WHERE user_id = ${user.id}`;

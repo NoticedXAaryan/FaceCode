@@ -21,7 +21,8 @@ import Button from '@/components/UI/Button';
 import { useToast } from '@/components/UI/Toast';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { detectFaceInUri, useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
+import { useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
+import { hasLikelySubjectInBase64 } from '@/services/frameAnalysis';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PREVIEW_W = SCREEN_W - 48;
@@ -56,7 +57,7 @@ export default function EnrollScreen() {
   }));
 
   const scanningEnabled = permission?.granted && !previewUri && !enrolling && !enrolled;
-  const { faceDetected, faceReady, detectorReady, detector } = useLiveFaceDetection(cameraRef, {
+  const { faceDetected, faceReady } = useLiveFaceDetection(cameraRef, {
     enabled: scanningEnabled,
   });
 
@@ -132,16 +133,8 @@ export default function EnrollScreen() {
         throw new Error('Could not capture image');
       }
 
-      if (detectorReady) {
-        const hasFace = await detectFaceInUri(
-          detector,
-          photo.uri,
-          photo.width ?? 640,
-          photo.height ?? 480,
-        );
-        if (!hasFace) {
-          throw new Error('No face detected. Center your face and try again.');
-        }
+      if (!hasLikelySubjectInBase64(photo.base64)) {
+        throw new Error('No face detected. Center your face and try again.');
       }
 
       setPreviewUri(photo.uri);
@@ -229,25 +222,23 @@ export default function EnrollScreen() {
         ) : (
           <>
             <Text style={s.hint}>
-              {!detectorReady
-                ? 'Use a development build for live face detection'
-                : faceReady
-                  ? 'Face detected — tap to enroll'
-                  : faceDetected
-                    ? 'Hold still…'
-                    : 'Center your face in the frame'}
+              {faceReady
+                ? 'Ready — tap to enroll'
+                : faceDetected
+                  ? 'Hold still…'
+                  : 'Center your face in the frame'}
             </Text>
             <Animated.View style={captureAnimated}>
               <Pressable
                 onPress={handleCapture}
-                disabled={busy || (!faceReady && detectorReady)}
+                disabled={busy || !faceReady}
                 onPressIn={() => (captureScale.value = withSpring(0.9))}
                 onPressOut={() => (captureScale.value = withSpring(1))}
-                style={[s.captureOuter, !faceReady && detectorReady && s.captureDisabled]}
+                style={[s.captureOuter, !faceReady && s.captureDisabled]}
               >
                 <LinearGradient
                   colors={
-                    faceReady || !detectorReady
+                    faceReady
                       ? [colors.accentFrom, colors.accentTo]
                       : [colors.surface2, colors.surface2]
                   }

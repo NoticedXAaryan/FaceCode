@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CameraView } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
+import { notify, NotificationFeedbackType } from '@/services/haptics';
 import api from '@/services/api';
 import { hasLikelySubjectInBase64 } from '@/services/frameAnalysis';
 
@@ -87,7 +87,7 @@ export function useFaceScanner(enabled: boolean) {
           setMatch(data);
           setPhase('matched');
           setHint('');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          notify(NotificationFeedbackType.Success).catch(() => {});
           return;
         }
         setPhase('scanning');

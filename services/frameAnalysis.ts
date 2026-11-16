@@ -1,6 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'jpeg-js';
 import facePixels from '../logic/facePixels';
+import { readUriAsBase64 } from '@/services/files';
 
 function base64ToBytes(base64: string): Uint8Array {
   const raw = base64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
@@ -23,8 +23,6 @@ export function hasLikelySubjectInBase64(base64: string): boolean {
 }
 
 export async function hasLikelySubjectInUri(uri: string): Promise<boolean> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const base64 = await readUriAsBase64(uri);
   return hasLikelySubjectInBase64(base64);
 }

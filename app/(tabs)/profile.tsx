@@ -3,7 +3,7 @@ import { Linking, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Swit
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system/legacy';
+import { readUriAsBase64 } from '@/services/files';
 import Avatar from '@/components/UI/Avatar';
 import AvatarUpload from '@/components/Profile/AvatarUpload';
 import SkeletonLoader from '@/components/UI/SkeletonLoader';
@@ -103,9 +103,7 @@ export default function ProfileScreen() {
     setSaving(true);
     try {
       if (avatarUri && avatarUri !== profile?.avatar_url && !avatarUri.startsWith('data:')) {
-        const imageBase64 = await FileSystem.readAsStringAsync(avatarUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        const imageBase64 = await readUriAsBase64(avatarUri);
         const uploaded = await api.post('/api/users/avatar', { imageBase64 });
         setAvatarUri(uploaded.data.avatarUrl);
       }

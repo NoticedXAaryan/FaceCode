@@ -11,6 +11,7 @@ import MatchBottomSheet from '@/components/Scanner/MatchBottomSheet';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useFaceScanner } from '@/hooks/useFaceScanner';
+import { isCameraSupported } from '@/services/camera';
 
 export default function ScannerScreen() {
   const insets = useSafeAreaInsets();
@@ -33,6 +34,18 @@ export default function ScannerScreen() {
   useEffect(() => {
     if (match && phase === 'matched') setSheetOpen(true);
   }, [match, phase]);
+
+  if (!isCameraSupported()) {
+    return (
+      <View style={[s.permRoot, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <Ionicons name="phone-portrait-outline" size={42} color={colors.textPrimary} />
+        <Text style={s.permTitle}>Scan from the phone app</Text>
+        <Text style={s.permSub}>This browser has no camera. Install FaceTag to scan faces. Your profile still works here.</Text>
+        <Button title="Open profile" onPress={() => router.push('/(tabs)/profile')} />
+      </View>
+    );
+  }
 
   if (!permission?.granted) {
     return (

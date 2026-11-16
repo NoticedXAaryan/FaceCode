@@ -24,7 +24,7 @@ For a stronger model, set `FACE_EMBEDDING_URL` to an endpoint that accepts `{ "i
 1. Copy `.env.example` to `.env`.
 2. Create a [Clerk](https://dashboard.clerk.com) application. Enable email/password and, if you want the Google button, the Google social connection. Put the publishable key in `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the secret in `CLERK_SECRET_KEY` on the server.
 3. Create a [Neon](https://neon.tech) database and run `api/_lib/schema.sql` in the SQL editor. Put the connection string in `DATABASE_URL`.
-4. Deploy the `api/` folder to Vercel (`npm run deploy` or the Vercel dashboard) and set `EXPO_PUBLIC_API_URL` to that origin.
+4. Deploy to Vercel (`npm run deploy`). The project serves the API functions and the exported web app from `dist/`. Set `EXPO_PUBLIC_API_URL` to that origin.
 5. Install and start:
 
 ```bash
@@ -42,9 +42,19 @@ Open the project in Expo Go, an emulator, or the web build (`npm run web`).
 | `npm test` | Face-signature and profile unit tests |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
-| `npm run export:web` | Static web bundle |
+| `npm run export:web` | Static web bundle in `dist/` |
+| `npm run build:apk` | EAS preview build, internal Android APK |
+| `npm run build:aab` | EAS production Android App Bundle |
+| `npm run build:ios` | EAS production iOS build |
+| `npm run submit:android` | Submit the production Android build |
 | `npx expo-doctor` | Expo SDK dependency check |
 | `npm run deploy` | Production Vercel deploy |
+
+## Store builds
+
+The iOS bundle id and Android package are `com.facetag.app`. Confirm that id before the first store submission. `owner` and `extra.eas.projectId` are intentionally unset until you run `npx eas init` on this repo.
+
+`npm run build:apk` uses the `preview` profile (internal APK). `npm run build:aab` and `npm run build:ios` use `production` (Android App Bundle, remote version auto-increment).
 
 ## Screens
 

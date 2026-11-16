@@ -13,7 +13,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
+import { notify, NotificationFeedbackType } from '@/services/haptics';
+import { isCameraSupported } from '@/services/camera';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import FaceFrame from '@/components/Scanner/FaceFrame';
 import Button from '@/components/UI/Button';
@@ -87,7 +88,7 @@ export default function EnrollScreen() {
 
       setEnrolling(false);
       setEnrolled(true);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await notify(NotificationFeedbackType.Success);
       router.replace(mode === 'update' ? '/(tabs)/settings' : '/setup');
     } catch (e: any) {
       if (e.response?.status === 503 && retryCount === 0) {
@@ -142,6 +143,24 @@ export default function EnrollScreen() {
     setEnrolled(false);
     setError('');
   };
+
+  if (!isCameraSupported()) {
+    return (
+      <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <StatusBar style="light" />
+        <View style={s.permBox}>
+          <Text style={s.permTitle}>Camera needs the phone app</Text>
+          <Text style={s.permSub}>
+            This browser cannot open a camera. Install FaceTag on your phone to enroll, or continue and add your links first.
+          </Text>
+          <Button
+            title={mode === 'update' ? 'Back to settings' : 'Continue without a photo'}
+            onPress={() => router.replace(mode === 'update' ? '/(tabs)/settings' : '/setup')}
+          />
+        </View>
+      </View>
+    );
+  }
 
   if (!permission?.granted) {
     return (

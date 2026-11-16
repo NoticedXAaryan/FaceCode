@@ -5,13 +5,40 @@
     "scheme": "facetag",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.facetag.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FaceTag needs the camera to scan faces and enroll yours."
+      }
+    },
+    "android": {
+      "package": "app.facetag.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "permissions": ["CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000"
+          "backgroundColor": "#000000",
+          "image": "./assets/splash-icon.png"
         }
       ],
       [
@@ -20,12 +47,18 @@
           "cameraPermission": "FaceTag needs camera access to scan faces and enroll your face."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FaceTag uses a photo you choose as your profile picture."
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       "expo-web-browser"
     ],
-    "assetBundlePatterns": [
-      "**/*"
-    ]
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }

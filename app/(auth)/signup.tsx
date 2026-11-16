@@ -18,7 +18,7 @@ import { colors, fonts } from '@/constants/theme';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
-  const { signUp, verifySignUpEmail, signInWithGoogle, getToken } = useAuth();
+  const { signUp, verifySignUpEmail, signInWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,8 +29,8 @@ export default function SignupScreen() {
   const [pendingVerification, setPendingVerification] = useState(false);
 
   const finishAuth = async () => {
-    const route = await getPostAuthRoute(getToken);
-    router.replace(route as any);
+    const route = await getPostAuthRoute();
+    router.replace(route as '/enroll');
   };
 
   const handleSignup = async () => {
@@ -121,7 +121,7 @@ export default function SignupScreen() {
         <Text style={s.logoSmall}>FaceTag</Text>
         <View style={s.form}>
           <Text style={s.title}>Create account</Text>
-          <Text style={s.subtitle}>Sign up with Google or email — we'll ask for the rest later.</Text>
+          <Text style={s.subtitle}>Sign up with Google or email. We will ask for the rest later.</Text>
 
           <GoogleButton onPress={handleGoogle} loading={googleLoading} />
 

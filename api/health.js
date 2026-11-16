@@ -1,23 +1,24 @@
 import sql from './_lib/db.js';
-import { isReady } from './_lib/faceService.js';
+import { engineName } from './_lib/faceService.js';
 
 export default async function handler(req, res) {
+  const faceService = engineName();
   try {
-    const dbResult = await sql`SELECT 1`;
+    await sql`SELECT 1`;
     res.json({
       status: 'ok',
       database: 'connected',
       auth: 'clerk',
-      faceService: isReady() ? 'ready' : 'not ready',
-      model: 'openai/clip-vit-base-patch32',
+      faceService,
       runtime: 'vercel-serverless',
     });
   } catch (err) {
-    res.json({
-      status: 'ok',
-      database: 'error: ' + err.message,
+    res.status(200).json({
+      status: 'degraded',
+      database: err.message,
       auth: 'clerk',
-      faceService: isReady() ? 'ready' : 'not ready',
+      faceService,
+      runtime: 'vercel-serverless',
     });
   }
 }

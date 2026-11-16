@@ -11,18 +11,17 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import axios from 'axios';
 import Input from '@/components/UI/Input';
 import Button from '@/components/UI/Button';
 import Avatar from '@/components/UI/Avatar';
 import { useAuth, saveUsername } from '@/hooks/useAuth';
 import { colors, fonts } from '@/constants/theme';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
+import { platformFromUrl } from '@/constants/platforms';
+import api from '@/services/api';
 
 export default function SetupScreen() {
   const insets = useSafeAreaInsets();
-  const { user, getToken } = useAuth();
+  const { user } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -51,29 +50,18 @@ export default function SetupScreen() {
       setUsernameStatus('checking');
       debounceRef.current = setTimeout(async () => {
         try {
-          const token = await getToken();
-          const { data } = await axios.get(`${API_URL}/api/users/${clean}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            validateStatus: (status) => status === 200 || status === 404,
-          });
-
-          if (!data?.user && !data?.username) {
+          const { data } = await api.get('/api/users/check-username', { params: { username: clean } });
+          setUsernameStatus(data.available ? 'available' : 'taken');
+        } catch (error: any) {
+          if (error?.response?.status === 404) {
             setUsernameStatus('available');
             return;
           }
-
-          const ownerId = data.user?.id ?? data.id;
-          if (ownerId && ownerId !== user?.id) {
-            setUsernameStatus('taken');
-          } else {
-            setUsernameStatus('available');
-          }
-        } catch {
           setUsernameStatus('idle');
         }
       }, 600);
     },
-    [user?.id, getToken],
+    [],
   );
 
   const handleSubmit = async () => {
@@ -99,26 +87,20 @@ export default function SetupScreen() {
       return;
     }
 
-    const links = linkUrl.trim()
-      ? [{ platform: 'website', url: linkUrl.trim() }]
-      : [];
+    const trimmedLink = linkUrl.trim();
+    const platform = trimmedLink ? platformFromUrl(trimmedLink) : null;
+    const links = trimmedLink ? [{ platform, url: trimmedLink }] : [];
 
     setSaving(true);
     try {
-      const token = await getToken();
-
-      await axios.put(
-        `${API_URL}/api/users/profile`,
-        {
-          fullName: displayName.trim(),
-          username: username.trim(),
-          bio: '',
-          isPublic,
-          primaryLinkPlatform: links.length ? 'website' : null,
-          links,
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      await api.put('/api/users/profile', {
+        fullName: displayName.trim(),
+        username: username.trim(),
+        bio: '',
+        isPublic,
+        primaryLinkPlatform: platform,
+        links,
+      });
 
       await saveUsername(username.trim());
       router.replace('/(tabs)/scanner');

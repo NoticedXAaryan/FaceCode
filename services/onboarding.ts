@@ -1,6 +1,5 @@
-import axios from 'axios';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
+import api from '@/services/api';
+import onboardingLib from '../logic/onboarding';
 
 export type OnboardingStatus = {
   hasFace: boolean;
@@ -8,27 +7,17 @@ export type OnboardingStatus = {
   username: string | null;
 };
 
-export async function fetchOnboardingStatus(
-  getToken: () => Promise<string | null>,
-): Promise<OnboardingStatus> {
-  const token = await getToken();
-  if (!token) {
-    return { hasFace: false, hasProfile: false, username: null };
-  }
+const routeForStatus = onboardingLib.routeForStatus as (status: OnboardingStatus) => string;
 
-  const { data } = await axios.get<OnboardingStatus>(`${API_URL}/api/users/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 15000,
-  });
-
+export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {
+  const { data } = await api.get<OnboardingStatus>('/api/users/me', { timeout: 15000 });
   return data;
 }
 
-export async function getPostAuthRoute(
-  getToken: () => Promise<string | null>,
-): Promise<string> {
-  const status = await fetchOnboardingStatus(getToken);
-  if (!status.hasFace) return '/enroll';
-  if (!status.hasProfile) return '/setup';
-  return '/(tabs)/scanner';
+export async function getPostAuthRoute(): Promise<string> {
+  try {
+    return routeForStatus(await fetchOnboardingStatus());
+  } catch {
+    return '/enroll';
+  }
 }

@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,20 +15,17 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import axios from 'axios';
 import FaceFrame from '@/components/Scanner/FaceFrame';
 import Button from '@/components/UI/Button';
 import { useToast } from '@/components/UI/Toast';
 import { colors, fonts } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
+import api from '@/services/api';
 import { useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
 import { hasLikelySubjectInBase64 } from '@/services/frameAnalysis';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PREVIEW_W = SCREEN_W - 48;
 const PREVIEW_H = 340;
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
 
 const LOADING_MESSAGES = [
   'Analyzing your face...',
@@ -38,8 +35,8 @@ const LOADING_MESSAGES = [
 
 export default function EnrollScreen() {
   const insets = useSafeAreaInsets();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
   const { showToast } = useToast();
-  const { getToken } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -56,7 +53,7 @@ export default function EnrollScreen() {
     transform: [{ scale: captureScale.value }],
   }));
 
-  const scanningEnabled = permission?.granted && !previewUri && !enrolling && !enrolled;
+  const scanningEnabled = Boolean(permission?.granted) && !previewUri && !busy && !enrolling && !enrolled;
   const { faceDetected, faceReady } = useLiveFaceDetection(cameraRef, {
     enabled: scanningEnabled,
   });
@@ -86,20 +83,12 @@ export default function EnrollScreen() {
     setError('');
 
     try {
-      const token = await getToken();
-      await axios.post(
-        `${API_URL}/api/users/enroll-face`,
-        { imageBase64: base64 },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 60000,
-        },
-      );
+      await api.post('/api/users/enroll-face', { imageBase64: base64 }, { timeout: 60000 });
 
       setEnrolling(false);
       setEnrolled(true);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      router.replace('/setup');
+      router.replace(mode === 'update' ? '/(tabs)/settings' : '/setup');
     } catch (e: any) {
       if (e.response?.status === 503 && retryCount === 0) {
         setLoadingMsg('AI warming up, retrying in 15s...');
@@ -128,7 +117,7 @@ export default function EnrollScreen() {
     setError('');
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.8 });
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.55 });
       if (!photo?.base64) {
         throw new Error('Could not capture image');
       }
@@ -182,7 +171,7 @@ export default function EnrollScreen() {
           style={[s.progressFill, { width: '50%' }]}
         />
       </View>
-      <Text style={s.stepText}>Step 1 of 2 - Enroll Face</Text>
+      <Text style={s.stepText}>{mode === 'update' ? 'Update your face' : 'Step 1 of 2 · Enroll your face'}</Text>
 
       <View style={s.cameraWrap}>
         {previewUri ? (

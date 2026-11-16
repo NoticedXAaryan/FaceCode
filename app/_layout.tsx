@@ -1,5 +1,6 @@
+import 'react-native-gesture-handler';
 import { useEffect, useRef } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -12,47 +13,24 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
-import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import { ClerkProvider } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/UI/Toast';
-import { colors } from '@/constants/theme';
+import BrandMark from '@/components/BrandMark';
+import { colors, fonts } from '@/constants/theme';
+import { CLERK_PUBLISHABLE_KEY, isClerkConfigured } from '@/constants/config';
 import { getPostAuthRoute } from '@/services/onboarding';
 
-// Prevent the native splash screen from hiding before we're ready
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── Clerk token cache using SecureStore ────────────────────────────────────────
-
-const tokenCache = {
-  async getToken(key: string) {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch {
-      return null;
-    }
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch {
-      return;
-    }
-  },
-};
-
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
-
-// ─── Inner navigator that can safely call useAuth() ────────────────────────────
-
 function RootNavigator() {
-  const { user, isLoading, getToken } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const routedRef = useRef(false);
-
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -60,54 +38,32 @@ function RootNavigator() {
     Inter_700Bold,
   });
 
-  // Hide the native splash screen once fonts + auth are both resolved
   useEffect(() => {
-    if (fontsLoaded && !isLoading) {
-      SplashScreen.hideAsync();
-    }
+    if (fontsLoaded && !isLoading) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded, isLoading]);
 
-  // Auth-based redirect
   useEffect(() => {
     if (isLoading || !fontsLoaded) return;
-
     const root = segments[0];
-    const guestAllowed =
-      root === 'splash' ||
-      root === '(onboarding)' ||
-      root === '(auth)' ||
-      root === 'profile';
+    const guestAllowed = root === 'splash' || root === '(onboarding)' || root === '(auth)' || root === 'profile' || root === 'legal';
 
     if (!user) {
       routedRef.current = false;
-      if (!guestAllowed) {
-        router.replace('/(auth)/login');
-      }
+      if (!guestAllowed) router.replace('/(auth)/login');
       return;
     }
 
-    const onBootstrap =
-      root === 'splash' || root === '(onboarding)' || root === '(auth)';
-
-    if (onBootstrap && !routedRef.current) {
+    if ((root === '(onboarding)' || root === '(auth)') && !routedRef.current) {
       routedRef.current = true;
-      getPostAuthRoute(getToken)
-        .then((route) => router.replace(route as '/enroll' | '/setup' | '/(tabs)/scanner'))
+      getPostAuthRoute()
+        .then((route) => router.replace(route as '/enroll'))
         .catch(() => router.replace('/(tabs)/scanner'));
     }
-  }, [isLoading, user, fontsLoaded, segments, getToken, router]);
+  }, [isLoading, user, fontsLoaded, segments, router]);
 
-  // Loading gate — show a plain black screen with a spinner
   if (!fontsLoaded || isLoading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.background,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+      <View style={s.boot}>
         <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
@@ -127,12 +83,35 @@ function RootNavigator() {
   );
 }
 
-// ─── Root layout wraps providers, child does the auth logic ────────────────────
+function MissingConfig() {
+  return (
+    <View style={s.boot}>
+      <BrandMark size={84} />
+      <Text style={s.title}>Add your Clerk key</Text>
+      <Text style={s.body}>
+        Copy .env.example to .env and set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. FaceTag uses Clerk for sign-in and does not start without it.
+      </Text>
+    </View>
+  );
+}
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
+
+  if (!isClerkConfigured()) return <MissingConfig />;
+
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      <GestureHandlerRootView style={s.app}>
         <SafeAreaProvider>
           <AuthProvider>
             <ToastProvider>
@@ -144,3 +123,17 @@ export default function RootLayout() {
     </ClerkProvider>
   );
 }
+
+const s = StyleSheet.create({
+  app: { flex: 1, backgroundColor: colors.background },
+  boot: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 28,
+    gap: 14,
+  },
+  title: { color: colors.textPrimary, fontFamily: fonts.bold, fontSize: 24, textAlign: 'center' },
+  body: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 15, textAlign: 'center', lineHeight: 22 },
+});

@@ -1,8 +1,13 @@
 import { neon } from '@neondatabase/serverless';
 
-// Create a SQL tagged template function using Neon's HTTP driver.
-// This uses HTTP fetch under the hood — no TCP connections, no pools,
-// no "waiting for connections" — perfect for serverless.
-const sql = neon(process.env.DATABASE_URL);
+let client;
 
-export default sql;
+export default function sql(strings, ...values) {
+  if (!process.env.DATABASE_URL) {
+    const error = new Error('DATABASE_URL is not set');
+    error.status = 503;
+    throw error;
+  }
+  if (!client) client = neon(process.env.DATABASE_URL);
+  return client(strings, ...values);
+}

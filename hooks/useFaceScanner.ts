@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import api from '../services/api';
-import { fileToBase64 } from '../services/faceUtils';
+import api from '@/services/api';
+import { hasLikelySubjectInBase64 } from '@/services/frameAnalysis';
 
-// ─── Types ──────────────────────────────────────────────────────────────────────
-
-export type ScanStatus = 'idle' | 'detecting' | 'matching' | 'matched' | 'notfound' | 'error';
+export type ScanPhase = 'idle' | 'scanning' | 'searching' | 'matched' | 'paused';
 
 export interface MatchResult {
   matched: boolean;
+  score?: number;
+  engine?: string;
+  message?: string;
   user?: {
     id: string;
     username: string;
@@ -19,139 +20,101 @@ export interface MatchResult {
     is_public?: boolean;
     primary_link_platform?: string;
   };
-  links?: Array<{
-    platform: string;
-    url: string;
-    display_order: number;
-  }>;
+  links?: { platform: string; url: string; display_order?: number }[];
 }
 
-// ─── Hook ───────────────────────────────────────────────────────────────────────
-
-export function useFaceScanner() {
+export function useFaceScanner(enabled: boolean) {
   const cameraRef = useRef<CameraView>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pausedUntilRef = useRef<number>(0);
+  const matchedRef = useRef(false);
+  const [phase, setPhase] = useState<ScanPhase>('idle');
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [faceReady, setFaceReady] = useState(false);
+  const [match, setMatch] = useState<MatchResult | null>(null);
+  const [hint, setHint] = useState('Point at a face');
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<ScanStatus>('idle');
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const reset = useCallback(() => {
+    matchedRef.current = false;
+    setMatch(null);
+    setPhase('idle');
+    setHint('Point at a face');
+    setFaceDetected(false);
+    setFaceReady(false);
+  }, []);
 
-  // ── Capture + match ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    let busy = false;
+    let stableSince: number | null = null;
 
-  const captureAndMatch = useCallback(async () => {
-    if (!cameraRef.current) return;
+    const timer = setInterval(async () => {
+      if (cancelled || busy || matchedRef.current || !cameraRef.current) return;
+      busy = true;
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          base64: true,
+          quality: 0.35,
+          skipProcessing: true,
+          shutterSound: false,
+        });
+        if (cancelled || !photo?.base64) return;
 
-    // Rate limit check
-    if (Date.now() < pausedUntilRef.current) return;
-
-    try {
-      setScanStatus('detecting');
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.4 });
-      if (!photo) {
-        setScanStatus('idle');
-        return;
-      }
-
-      setScanStatus('matching');
-      const imageBase64 = await fileToBase64(photo.uri);
-      const { data } = await api.post('/api/scan/match', { imageBase64 });
-
-      if (data.matched) {
-        setScanStatus('matched');
-        setMatchResult(data);
-        setIsScanning(false);
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
+        const valid = hasLikelySubjectInBase64(photo.base64);
+        setFaceDetected(valid);
+        if (!valid) {
+          stableSince = null;
+          setFaceReady(false);
+          setPhase('idle');
+          setHint('Point at a face');
+          return;
         }
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      } else {
-        setScanStatus('notfound');
-        setMatchResult(null);
-        // Reset to idle after a brief display
-        setTimeout(() => {
-          setScanStatus((prev) => (prev === 'notfound' ? 'idle' : prev));
-        }, 2000);
+
+        if (!stableSince) stableSince = Date.now();
+        const ready = Date.now() - stableSince >= 800;
+        setFaceReady(ready);
+        if (!ready) {
+          setPhase('scanning');
+          setHint('Hold still…');
+          return;
+        }
+
+        setPhase('searching');
+        setHint('Searching FaceTag…');
+        const { data } = await api.post('/api/scan/match', { imageBase64: photo.base64 }, { timeout: 30000 });
+        if (cancelled) return;
+        if (data?.matched && data.user) {
+          matchedRef.current = true;
+          setMatch(data);
+          setPhase('matched');
+          setHint('');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          return;
+        }
+        setPhase('scanning');
+        setHint(data?.message || 'No public match yet');
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 503) {
+          setPhase('paused');
+          setHint('Face service is warming up');
+        } else if (status === 429) {
+          setHint('Slowing down for a moment');
+        } else if (status === 400) {
+          setPhase('idle');
+          setHint('Center a face in the frame');
+        } else if (!error?.response) {
+          setHint('Can’t reach FaceTag');
+        }
+      } finally {
+        busy = false;
       }
-    } catch (e: any) {
-      // Handle rate limiting
-      if (e.response?.status === 429) {
-        pausedUntilRef.current = Date.now() + 10000;
-      }
-      setScanStatus('error');
-      setTimeout(() => {
-        setScanStatus((prev) => (prev === 'error' ? 'idle' : prev));
-      }, 2000);
-    }
-  }, []);
-
-  // ── Start / stop / reset ──────────────────────────────────────────────────
-
-  const startScanning = useCallback(() => {
-    setIsScanning(true);
-    setMatchResult(null);
-    setScanStatus('idle');
-  }, []);
-
-  const stopScanning = useCallback(() => {
-    setIsScanning(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const resetScan = useCallback(() => {
-    setMatchResult(null);
-    setScanStatus('idle');
-    startScanning();
-  }, [startScanning]);
-
-  // ── Interval logic ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (isScanning) {
-      // Clear any existing interval
-      if (intervalRef.current) clearInterval(intervalRef.current);
-
-      intervalRef.current = setInterval(() => {
-        captureAndMatch();
-      }, 1500);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
+    }, 1400);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      cancelled = true;
+      clearInterval(timer);
     };
-  }, [isScanning, captureAndMatch]);
+  }, [enabled]);
 
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, []);
-
-  return {
-    cameraRef,
-    isScanning,
-    scanStatus,
-    matchResult,
-    startScanning,
-    stopScanning,
-    resetScan,
-    captureAndMatch,
-  };
+  return { cameraRef, phase, faceDetected, faceReady, match, hint, reset };
 }

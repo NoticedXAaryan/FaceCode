@@ -1,12 +1,9 @@
 {
   "version": 2,
+  "framework": null,
+  "installCommand": "npm ci",
   "buildCommand": "npm run export:web",
   "outputDirectory": "dist",
-  "functions": {
-    "api/**/*.js": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
@@ -19,6 +16,6 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

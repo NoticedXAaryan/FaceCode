@@ -1,99 +1,75 @@
 import sql from '../_lib/db.js';
 import { verifyAuth } from '../_lib/auth.js';
-import { extractFaceEmbedding, cosineSimilarity, isReady } from '../_lib/faceService.js';
-import { validateImageHasSubject } from '../_lib/imageValidation.js';
+import { allowMethod, sendError } from '../_lib/http.js';
+import { rateLimit } from '../_lib/rateLimit.js';
+import { ensureUser, getLinks, recordEvent } from '../_lib/users.js';
+import {
+  cosineSimilarity,
+  extractFaceEmbedding,
+  parseEmbedding,
+  thresholdFor,
+} from '../_lib/faceService.js';
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
+export const config = { api: { bodyParser: { sizeLimit: '8mb' } } };
 
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+  if (!allowMethod(req, res, 'POST')) return;
   const user = await verifyAuth(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!rateLimit(`scan:${user.id}`, 20, 60_000)) {
+    return res.status(429).json({ error: 'Too many scans. Wait a moment and try again.' });
+  }
 
   try {
-    if (!isReady()) {
-      return res.status(503).json({
-        matched: false,
-        error: 'Face service not ready. Add HUGGINGFACE_API_KEY.',
-      });
-    }
-
-    const { imageBase64 } = req.body;
+    const { imageBase64 } = req.body || {};
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
-    await validateImageHasSubject(imageBase64);
-    const scannedEmbedding = await extractFaceEmbedding(imageBase64);
+    await ensureUser(user);
+    const { embedding: scanned, model } = await extractFaceEmbedding(imageBase64);
+    const rows = await sql`SELECT user_id, embedding FROM face_embeddings`;
 
-    const embeddings = await sql`SELECT user_id, embedding FROM face_embeddings`;
-
-    if (!embeddings || embeddings.length === 0) {
-      return res.json({ matched: false, message: 'No enrolled faces found' });
-    }
-
-    let bestMatch = null;
+    let best = null;
     let bestScore = 0;
-    const THRESHOLD = 0.6;
-
-    for (const row of embeddings) {
+    for (const row of rows) {
       if (row.user_id === user.id) continue;
-      const score = cosineSimilarity(scannedEmbedding, row.embedding);
+      const stored = parseEmbedding(row.embedding);
+      const score = cosineSimilarity(scanned, stored);
       if (score > bestScore) {
         bestScore = score;
-        bestMatch = row;
+        best = row;
       }
     }
 
-    if (!bestMatch || bestScore < THRESHOLD) {
-      return res.json({ matched: false, score: bestScore });
+    const threshold = thresholdFor(scanned);
+    if (!best || bestScore < threshold) {
+      return res.json({ matched: false, score: bestScore, engine: model });
     }
 
     const users = await sql`
       SELECT id, username, full_name, bio, avatar_url, is_public, primary_link_platform
-      FROM users WHERE id = ${bestMatch.user_id} AND is_public = true
+      FROM users WHERE id = ${best.user_id} AND is_public = true
     `;
-
-    if (users.length === 0) {
-      return res.json({ matched: false, message: 'Matched user has a private profile' });
+    if (!users.length) {
+      return res.json({ matched: false, message: 'Matched user has a private profile', score: bestScore });
     }
 
     const matchedUser = users[0];
-
-    const links = await sql`
-      SELECT platform, url, display_order FROM social_links
-      WHERE user_id = ${matchedUser.id} ORDER BY display_order
-    `;
-
-    // Log scan event (fire-and-forget)
-    sql`
-      INSERT INTO scan_events (scanner_user_id, scanned_user_id, matched)
-      VALUES (${user.id}, ${matchedUser.id}, ${true})
-    `.catch(() => {});
+    const links = await getLinks(matchedUser.id);
+    recordEvent({
+      type: 'scan',
+      scannerId: user.id,
+      scannedId: matchedUser.id,
+      matched: true,
+    }).catch(() => {});
 
     res.json({
       matched: true,
       score: bestScore,
+      engine: model,
       user: matchedUser,
       links: links || [],
     });
   } catch (err) {
-    const msg = err.message || 'Scan failed';
-    const isClientError =
-      msg.includes('face') ||
-      msg.includes('camera') ||
-      msg.includes('blank') ||
-      msg.includes('Center');
-    if (isClientError) {
-      return res.status(400).json({ matched: false, error: msg });
-    }
-    console.error('Scan match error:', msg);
-    res.status(500).json({ error: msg });
+    sendError(res, err);
   }
 }

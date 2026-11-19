@@ -6,6 +6,7 @@ dist/
 npm-debug.*
 *.log
 .DS_Store
+results/
 
 # IDE & AI Metadata
 .agents/
@@ -13,3 +14,4 @@ npm-debug.*
 .cursor/
 .mcp.json
 skills-lock.json
+__pycache__/

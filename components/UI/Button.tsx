@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { impact, ImpactFeedbackStyle } from '@/services/haptics';
 import { colors, fonts } from '@/constants/theme';
 
 type Variant = 'gradient' | 'outline' | 'ghost' | 'danger';
@@ -20,7 +20,7 @@ export default function Button({ title, onPress, variant = 'gradient', disabled,
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    impact(ImpactFeedbackStyle.Medium);
     onPress();
   };
 

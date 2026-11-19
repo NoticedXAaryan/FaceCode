@@ -1,25 +1,33 @@
-import { verifyToken } from '@clerk/backend';
+import { fromNodeHeaders } from 'better-auth/node';
+import { getAuth } from './betterAuth.js';
 
 /**
- * Verify a Clerk JWT from the Authorization header.
- * Returns { id, email } on success, or null on failure.
+ * Resolve the signed-in Better Auth user from request cookies / headers.
  */
 export async function verifyAuth(req) {
-  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.split(' ')[1];
-
   try {
-    const payload = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
+    const auth = getAuth();
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
     });
-
-    if (!payload || !payload.sub) return null;
-    return { id: payload.sub, email: payload.email || '' };
+    if (!session?.user?.id) return null;
+    return {
+      id: session.user.id,
+      email: session.user.email || '',
+      name: session.user.name || '',
+    };
   } catch {
     return null;
+  }
+}
+
+export async function deleteAuthUser(headers) {
+  try {
+    const auth = getAuth();
+    await auth.api.deleteUser({
+      headers: fromNodeHeaders(headers),
+    });
+  } catch {
+    // FaceTag rows are already removed; auth cleanup can be retried.
   }
 }

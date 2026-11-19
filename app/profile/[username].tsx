@@ -16,16 +16,8 @@ import Avatar from '@/components/UI/Avatar';
 import Button from '@/components/UI/Button';
 import SkeletonLoader from '@/components/UI/SkeletonLoader';
 import { colors, fonts } from '@/constants/theme';
+import { openableUrl, platformMeta } from '@/constants/platforms';
 import api from '@/services/api';
-
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📸',
-  linkedin: '💼',
-  whatsapp: '💬',
-  twitter: '🐦',
-  x: '🐦',
-  website: '🌐',
-};
 
 export default function PublicProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -46,6 +38,7 @@ export default function PublicProfileScreen() {
   useEffect(() => {
     if (!username) return;
     setLoading(true);
+    api.post('/api/events/view', { username }).catch(() => {});
     api
       .get(`/api/users/${username}`)
       .then((res) => {
@@ -61,9 +54,11 @@ export default function PublicProfileScreen() {
       .finally(() => setLoading(false));
   }, [username]);
 
-  const openLink = (url: string) => {
-    if (url && !url.startsWith('http')) url = 'https://' + url;
-    if (url) Linking.openURL(url);
+  const openLink = (platform: string, url: string) => {
+    const href = openableUrl(url);
+    if (!href) return;
+    api.post('/api/events/click', { username, platform }).catch(() => {});
+    Linking.openURL(href);
   };
 
   const handleShare = async () => {
@@ -166,14 +161,14 @@ export default function PublicProfileScreen() {
         {/* Links */}
         <View style={s.linksList}>
           {linksList.map((link: any, idx: number) => {
-            const pKey = (link.platform || '').toLowerCase();
+            const meta = platformMeta(link.platform || '');
             return (
-              <Pressable key={idx} style={s.linkRow} onPress={() => openLink(link.url)}>
-                <View style={s.platformIcon}>
-                  <Text style={s.platformEmoji}>{PLATFORM_ICONS[pKey] || '🔗'}</Text>
+              <Pressable key={idx} style={s.linkRow} onPress={() => openLink(link.platform, link.url)}>
+                <View style={[s.platformIcon, { backgroundColor: meta.color }]}>
+                  <Ionicons name={meta.icon as any} size={18} color="#fff" />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={s.platformName}>{link.platform}</Text>
+                  <Text style={s.platformName}>{meta.label}</Text>
                   <Text style={s.linkUrl} numberOfLines={1}>
                     {link.url}
                   </Text>
@@ -186,7 +181,7 @@ export default function PublicProfileScreen() {
 
         {/* Primary CTA */}
         {primaryLink ? (
-          <Pressable onPress={() => openLink(primaryLink.url)}>
+          <Pressable onPress={() => openLink(primaryLink.platform, primaryLink.url)}>
             <LinearGradient
               colors={[colors.accentFrom, colors.accentTo]}
               start={{ x: 0, y: 0 }}

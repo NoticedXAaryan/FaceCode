@@ -1,208 +1,104 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
-import Avatar from '@/components/UI/Avatar';
 import Button from '@/components/UI/Button';
 import FaceFrame from '@/components/Scanner/FaceFrame';
 import MatchBottomSheet from '@/components/Scanner/MatchBottomSheet';
 import { colors, fonts } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useLiveFaceDetection } from '@/hooks/useLiveFaceDetection';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://face-code-pink.vercel.app';
-
-type ScanStatus = 'idle' | 'scanning' | 'detecting' | 'matched';
+import { useFaceScanner } from '@/hooks/useFaceScanner';
+import { isCameraSupported } from '@/services/camera';
 
 export default function ScannerScreen() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
-  const { getToken } = useAuth();
-
-  const cameraRef = useRef<CameraView | null>(null);
-  const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isScanningRef = useRef(false);
-
+  const { user } = useAuth();
   const [facing, setFacing] = useState<'front' | 'back'>('back');
   const [flash, setFlash] = useState(false);
-  const [status, setStatus] = useState<ScanStatus>('idle');
-  const [matchData, setMatchData] = useState<any>(null);
-  const [isMatchFound, setIsMatchFound] = useState(false);
-  const [showSheet, setShowSheet] = useState(false);
-
-  const clearScanLoop = useCallback(() => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
-  }, []);
-
-  const faceCheckEnabled = permission?.granted && !isMatchFound && status !== 'matched';
-  const { faceDetected, faceReady } = useLiveFaceDetection(cameraRef, {
-    enabled: faceCheckEnabled,
-    intervalMs: 500,
-  });
-  const faceInFrameRef = useRef(false);
-  faceInFrameRef.current = faceReady;
-
-  const scanOnce = useCallback(async () => {
-    if (!cameraRef.current || isMatchFound || isScanningRef.current) return;
-    if (!faceInFrameRef.current) {
-      setStatus('idle');
-      return;
-    }
-
-    isScanningRef.current = true;
-    setStatus('detecting');
-
-    try {
-      const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.4,
-        skipProcessing: true,
-      });
-
-      if (!photo?.base64) {
-        setStatus('scanning');
-        return;
-      }
-
-      const token = await getToken();
-      const response = await axios.post(
-        `${API_URL}/api/scan/match`,
-        { imageBase64: photo.base64 },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 30000,
-        },
-      );
-
-      if (response.data?.matched === true) {
-        clearScanLoop();
-        setMatchData(response.data);
-        setIsMatchFound(true);
-        setShowSheet(true);
-        setStatus('matched');
-        return;
-      }
-
-      setStatus('scanning');
-    } catch (e: any) {
-      if (e.response?.status === 503) {
-        clearScanLoop();
-        setStatus('idle');
-        scanTimeoutRef.current = setTimeout(() => {
-          if (!isMatchFound) {
-            startScanLoop();
-          }
-        }, 15000);
-      }
-    } finally {
-      isScanningRef.current = false;
-    }
-  }, [clearScanLoop, isMatchFound]);
-
-  const startScanLoop = useCallback(() => {
-    clearScanLoop();
-
-    if (isMatchFound) return;
-
-    setStatus('scanning');
-    scanIntervalRef.current = setInterval(() => {
-      scanOnce();
-    }, 2000);
-  }, [clearScanLoop, isMatchFound, scanOnce]);
-
-  useEffect(() => {
-    if (permission?.granted) {
-      startScanLoop();
-    }
-
-    return () => {
-      clearScanLoop();
-    };
-  }, [permission?.granted, startScanLoop, clearScanLoop]);
-
-  const handleCloseSheet = () => {
-    setShowSheet(false);
-    setIsMatchFound(false);
-    setMatchData(null);
-    setStatus('idle');
-
-    scanTimeoutRef.current = setTimeout(() => {
-      startScanLoop();
-    }, 1000);
-  };
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const scanning = Boolean(permission?.granted) && !sheetOpen;
+  const { cameraRef, phase, faceReady, match, hint, reset } = useFaceScanner(scanning);
 
   const frameStatus =
-    status === 'matched' ? 'matched' :
-    status === 'detecting' ? 'detecting' :
-    faceReady ? 'detecting' :
-    faceDetected ? 'scanning' :
-    'idle';
+    phase === 'matched' ? 'matched' : phase === 'searching' || faceReady ? 'detecting' : phase === 'scanning' ? 'scanning' : 'idle';
 
-  const statusText =
-    status === 'detecting' ? 'Searching...' :
-    status === 'matched' ? '' :
-    faceReady ? 'Scanning…' :
-    faceDetected ? 'Hold still…' :
-    'Point at a face';
+  const closeSheet = () => {
+    setSheetOpen(false);
+    reset();
+  };
+
+  useEffect(() => {
+    if (match && phase === 'matched') setSheetOpen(true);
+  }, [match, phase]);
+
+  if (!isCameraSupported()) {
+    return (
+      <View style={[s.permRoot, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <Ionicons name="phone-portrait-outline" size={42} color={colors.textPrimary} />
+        <Text style={s.permTitle}>Scan from the phone app</Text>
+        <Text style={s.permSub}>This browser has no camera. Install FaceTag to scan faces. Your profile still works here.</Text>
+        <Button title="Open profile" onPress={() => router.push('/(tabs)/profile')} />
+      </View>
+    );
+  }
 
   if (!permission?.granted) {
     return (
-      <View style={[s.permRoot, { paddingTop: insets.top }]}> 
+      <View style={[s.permRoot, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <Text style={s.permIcon}>📷</Text>
+        <Ionicons name="camera-outline" size={42} color={colors.textPrimary} />
         <Text style={s.permTitle}>Camera access needed</Text>
-        <Text style={s.permSub}>FaceTag needs your camera to scan faces.</Text>
+        <Text style={s.permSub}>FaceTag uses the camera to recognize enrolled faces. Photos are not saved on the server.</Text>
         <Button title="Allow camera" onPress={requestPermission} />
       </View>
     );
   }
 
+  const initials = user?.fullName
+    ? user.fullName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+    : 'FT';
+
   return (
     <View style={s.root}>
       <StatusBar hidden />
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={flash} />
-
-      <View style={[s.overlay, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}> 
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing={facing}
+        enableTorch={flash && facing === 'back'}
+      />
+      <View style={[s.overlay, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}>
         <View style={s.topBar}>
-          <Pressable onPress={() => setFlash((f) => !f)} style={s.controlBtn}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Toggle flash" onPress={() => setFlash((value) => !value)} style={s.controlBtn}>
             <Ionicons name={flash ? 'flash' : 'flash-outline'} size={20} color={flash ? '#F5A623' : '#fff'} />
           </Pressable>
           <Text style={s.brand}>FaceTag</Text>
-          <Pressable onPress={() => router.push('/(tabs)/profile')} style={s.controlBtn}>
-            <Avatar size={32} initials="FT" />
+          <Pressable accessibilityRole="button" accessibilityLabel="Open profile" onPress={() => router.push('/(tabs)/profile')} style={s.controlBtn}>
+            <Text style={s.initials}>{initials}</Text>
           </Pressable>
         </View>
-
         <View style={s.center}>
           <FaceFrame status={frameStatus} />
-          {statusText ? <Text style={s.statusText}>{statusText}</Text> : null}
+          {hint ? <Text style={s.statusText}>{hint}</Text> : null}
         </View>
-
         <View style={s.bottomBar}>
           <View style={s.controlBtn} />
           <Pressable
-            onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+            accessibilityRole="button"
+            accessibilityLabel="Flip camera"
+            onPress={() => setFacing((value) => (value === 'back' ? 'front' : 'back'))}
             style={s.controlBtn}
           >
             <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
           </Pressable>
         </View>
       </View>
-
-      <MatchBottomSheet isVisible={showSheet} matchData={matchData} onClose={handleCloseSheet} />
+      <MatchBottomSheet isVisible={sheetOpen} matchData={match} onClose={closeSheet} />
     </View>
   );
 }
@@ -210,39 +106,30 @@ export default function ScannerScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   overlay: { flex: 1, justifyContent: 'space-between' },
-  topBar: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  topBar: { paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  brand: { color: '#fff', fontFamily: fonts.semibold, fontSize: 16, letterSpacing: 0.4 },
+  center: { alignItems: 'center', gap: 16 },
+  statusText: {
+    color: '#fff',
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
   },
-  brand: { color: '#fff', fontFamily: fonts.semibold, fontSize: 16 },
-  center: { alignItems: 'center', gap: 14 },
-  statusText: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 15 },
-  bottomBar: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+  bottomBar: { paddingHorizontal: 24, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between' },
   controlBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  permRoot: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    gap: 16,
-  },
-  permIcon: { fontSize: 48 },
-  permTitle: { color: '#fff', fontFamily: fonts.bold, fontSize: 20, textAlign: 'center' },
-  permSub: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 14, textAlign: 'center' },
+  initials: { color: '#fff', fontFamily: fonts.semibold, fontSize: 12 },
+  permRoot: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', padding: 28, gap: 14 },
+  permTitle: { color: '#fff', fontFamily: fonts.bold, fontSize: 22, textAlign: 'center' },
+  permSub: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });

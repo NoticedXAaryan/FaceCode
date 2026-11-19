@@ -18,46 +18,32 @@ import { colors, fonts } from '@/constants/theme';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
-  const { signUp, verifySignUpEmail, signInWithGoogle, getToken } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
 
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
-  const [pendingVerification, setPendingVerification] = useState(false);
 
   const finishAuth = async () => {
-    const route = await getPostAuthRoute(getToken);
-    router.replace(route as any);
+    const route = await getPostAuthRoute();
+    router.replace(route as '/enroll');
   };
 
   const handleSignup = async () => {
     setError('');
-    setLoading(true);
-    try {
-      const result = await signUp(email, password, '', undefined);
-      if (result.needsVerification) {
-        setPendingVerification(true);
-      } else {
-        await finishAuth();
-      }
-    } catch (e: any) {
-      setError(e.message || 'Sign up failed.');
-    } finally {
-      setLoading(false);
+    if (password.length < 8) {
+      setError('Use at least 8 characters.');
+      return;
     }
-  };
-
-  const handleVerify = async () => {
-    setError('');
     setLoading(true);
     try {
-      await verifySignUpEmail(code);
+      await signUp(email, password, '', fullName);
       await finishAuth();
     } catch (e: any) {
-      setError(e.message || 'Verification failed.');
+      setError(e.message || 'Sign up failed.');
     } finally {
       setLoading(false);
     }
@@ -76,52 +62,13 @@ export default function SignupScreen() {
     }
   };
 
-  if (pendingVerification) {
-    return (
-      <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <KeyboardAvoidingView style={s.inner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Text style={s.logoSmall}>FaceTag</Text>
-          <View style={s.form}>
-            <Text style={s.title}>Verify your email</Text>
-            <Text style={s.subtitle}>We sent a code to {email}</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Verification code"
-              placeholderTextColor={colors.textTertiary}
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              autoFocus
-            />
-            <Pressable onPress={handleVerify} disabled={loading}>
-              <LinearGradient
-                colors={[colors.accentFrom, colors.accentTo]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={s.button}
-              >
-                <Text style={s.buttonText}>{loading ? 'Verifying…' : 'Verify & continue'}</Text>
-              </LinearGradient>
-            </Pressable>
-            {error ? <Text style={s.error}>{error}</Text> : null}
-          </View>
-          <Text style={s.switchText}>
-            <Text style={s.switchLink} onPress={() => setPendingVerification(false)}>
-              ← Back
-            </Text>
-          </Text>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
   return (
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <KeyboardAvoidingView style={s.inner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Text style={s.logoSmall}>FaceTag</Text>
         <View style={s.form}>
           <Text style={s.title}>Create account</Text>
-          <Text style={s.subtitle}>Sign up with Google or email — we'll ask for the rest later.</Text>
+          <Text style={s.subtitle}>Sign up with Google or email. We will ask for the rest later.</Text>
 
           <GoogleButton onPress={handleGoogle} loading={googleLoading} />
 
@@ -131,6 +78,14 @@ export default function SignupScreen() {
             <View style={s.dividerLine} />
           </View>
 
+          <TextInput
+            style={s.input}
+            placeholder="Name"
+            placeholderTextColor={colors.textTertiary}
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+          />
           <TextInput
             style={s.input}
             placeholder="Email"
@@ -182,13 +137,25 @@ const s = StyleSheet.create({
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.surfaceBorder },
   dividerText: { color: colors.textTertiary, fontFamily: fonts.regular, fontSize: 13 },
   input: {
-    backgroundColor: colors.surface2, borderRadius: 12, height: 52, paddingHorizontal: 16,
-    color: colors.textPrimary, fontFamily: fonts.regular, fontSize: 15,
-    borderWidth: 1, borderColor: 'transparent',
+    backgroundColor: colors.surface2,
+    borderRadius: 12,
+    height: 52,
+    paddingHorizontal: 16,
+    color: colors.textPrimary,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   button: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
   buttonText: { color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 16 },
   error: { color: colors.danger, fontFamily: fonts.regular, fontSize: 13, textAlign: 'center' },
-  switchText: { color: colors.textSecondary, fontFamily: fonts.regular, fontSize: 15, textAlign: 'center', marginBottom: 16 },
+  switchText: {
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
   switchLink: { color: colors.accent, fontFamily: fonts.semibold },
 });

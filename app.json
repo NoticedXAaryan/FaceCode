@@ -5,27 +5,66 @@
     "scheme": "facetag",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.facetag.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FaceTag uses the camera to scan faces and enroll yours. Photos are not stored.",
+        "NSPhotoLibraryUsageDescription": "FaceTag uses a photo you choose from your library as your profile picture."
+      }
+    },
+    "android": {
+      "package": "com.facetag.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "permissions": ["CAMERA"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "themeColor": "#000000",
+      "backgroundColor": "#000000"
+    },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000"
+          "backgroundColor": "#000000",
+          "image": "./assets/splash-icon.png"
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "FaceTag needs camera access to scan faces and enroll your face."
+          "cameraPermission": "FaceTag uses the camera to scan faces and enroll yours. Photos are not stored.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FaceTag uses a photo you choose from your library as your profile picture.",
+          "cameraPermission": "FaceTag uses the camera to scan faces and enroll yours. Photos are not stored."
         }
       ],
       "expo-secure-store",
       "expo-font",
       "expo-web-browser"
     ],
-    "assetBundlePatterns": [
-      "**/*"
-    ]
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }

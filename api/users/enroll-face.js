@@ -1,45 +1,39 @@
 import sql from '../_lib/db.js';
 import { verifyAuth } from '../_lib/auth.js';
-import { extractFaceEmbedding, isReady } from '../_lib/faceService.js';
-import { validateImageHasSubject } from '../_lib/imageValidation.js';
+import { allowMethod, sendError } from '../_lib/http.js';
+import { ensureUser } from '../_lib/users.js';
+import { extractFaceEmbedding } from '../_lib/faceService.js';
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
+export const config = { api: { bodyParser: { sizeLimit: '8mb' } } };
 
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+  if (!allowMethod(req, res, 'POST')) return;
   const user = await verifyAuth(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    if (!isReady()) {
-      return res.status(503).json({ error: 'Face service not ready. Set HUGGINGFACE_API_KEY.' });
-    }
-
-    const { imageBase64 } = req.body;
+    const { imageBase64 } = req.body || {};
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
-    await validateImageHasSubject(imageBase64);
-    const embedding = await extractFaceEmbedding(imageBase64);
-
+    await ensureUser(user);
+    const { embedding, model } = await extractFaceEmbedding(imageBase64);
     await sql`DELETE FROM face_embeddings WHERE user_id = ${user.id}`;
-    await sql`INSERT INTO face_embeddings (user_id, embedding) VALUES (${user.id}, ${embedding})`;
+    try {
+      await sql`
+        INSERT INTO face_embeddings (user_id, embedding)
+        VALUES (${user.id}, ${JSON.stringify(embedding)}::jsonb)
+      `;
+    } catch (err) {
+      const message = String(err.message || '');
+      if (!message.includes('jsonb') && !message.includes('type')) throw err;
+      await sql`
+        INSERT INTO face_embeddings (user_id, embedding)
+        VALUES (${user.id}, ${embedding})
+      `;
+    }
 
-    res.json({ success: true, message: 'Face enrolled successfully' });
+    res.json({ success: true, model, message: 'Face enrolled successfully' });
   } catch (err) {
-    const msg = err.message || 'Enrollment failed';
-    const isClientError =
-      msg.includes('face') ||
-      msg.includes('camera') ||
-      msg.includes('blank') ||
-      msg.includes('Center');
-    res.status(isClientError ? 400 : 500).json({ error: msg });
+    sendError(res, err);
   }
 }

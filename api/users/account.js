@@ -1,5 +1,5 @@
 import sql from '../_lib/db.js';
-import { deleteClerkUser, verifyAuth } from '../_lib/auth.js';
+import { deleteAuthUser, verifyAuth } from '../_lib/auth.js';
 import { allowMethod, sendError } from '../_lib/http.js';
 
 export default async function handler(req, res) {
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   try {
     await sql`DELETE FROM users WHERE id = ${user.id}`;
-    await deleteClerkUser(user.id);
+    await deleteAuthUser(req.headers);
     res.json({ success: true });
   } catch (err) {
     sendError(res, err);

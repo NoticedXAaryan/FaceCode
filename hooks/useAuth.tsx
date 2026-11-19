@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
-import { useAuth as useClerkAuth, useClerk, useSignIn, useSignUp, useSSO, useUser as useClerkUser } from '@clerk/expo';
-import { setApiTokenGetter } from '@/services/api';
+import { authClient, getAuthCookieHeader } from '@/services/authClient';
+import { setApiCookieGetter } from '@/services/api';
 import { storageDelete, storageGet, storageSet } from '@/services/storage';
 
 export type AuthUser = {
@@ -13,11 +13,16 @@ type AuthContextValue = {
   user: AuthUser | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, username?: string, fullName?: string) => Promise<{ needsVerification: boolean }>;
+  signUp: (
+    email: string,
+    password: string,
+    username?: string,
+    fullName?: string,
+  ) => Promise<{ needsVerification: boolean }>;
   verifySignUpEmail: (code: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
-  confirmPasswordReset: (code: string, password: string) => Promise<void>;
+  confirmPasswordReset: (token: string, password: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
@@ -34,133 +39,104 @@ export async function getStoredUsername() {
   return storageGet(USERNAME_KEY);
 }
 
-function clerkMessage(error: any, fallback: string) {
-  return error?.longMessage || error?.message || error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || fallback;
+function authMessage(error: any, fallback: string) {
+  return error?.message || error?.error?.message || fallback;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { isLoaded: isAuthLoaded, isSignedIn, signOut: clerkSignOut, getToken: clerkGetToken } = useClerkAuth();
-  const { isLoaded: isUserLoaded, user: clerkUser } = useClerkUser();
-  const { signIn: clerkSignIn } = useSignIn();
-  const { signUp: clerkSignUp } = useSignUp();
-  const { startSSOFlow } = useSSO();
-  const clerk = useClerk();
+  const session = authClient.useSession();
 
-  const getToken = useCallback(async () => clerkGetToken(), [clerkGetToken]);
+  const getToken = useCallback(async () => getAuthCookieHeader(), []);
 
   useEffect(() => {
-    setApiTokenGetter(getToken);
+    setApiCookieGetter(getToken);
   }, [getToken]);
 
   const user: AuthUser | null = useMemo(() => {
-    if (!isSignedIn || !clerkUser) return null;
+    const sessionUser = session.data?.user;
+    if (!sessionUser) return null;
     return {
-      id: clerkUser.id,
-      email: clerkUser.primaryEmailAddress?.emailAddress || '',
-      fullName: clerkUser.fullName || undefined,
+      id: sessionUser.id,
+      email: sessionUser.email || '',
+      fullName: sessionUser.name || undefined,
     };
-  }, [isSignedIn, clerkUser]);
+  }, [session.data?.user]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const result = await clerkSignIn.create({ identifier: email.trim(), password });
-    if (result.error) throw new Error(clerkMessage(result.error, 'Sign in failed'));
-    if (clerkSignIn.status === 'needs_second_factor') {
-      throw new Error('This account needs a second factor. Turn that off in Clerk or sign in on the web.');
-    }
-    if (clerkSignIn.status !== 'complete') {
-      throw new Error(`Sign in needs another step (${clerkSignIn.status || 'unknown'}).`);
-    }
-    const finalized = await clerkSignIn.finalize();
-    if (finalized.error) throw new Error(clerkMessage(finalized.error, 'Could not start the session'));
-  }, [clerkSignIn]);
-
-  const signUp = useCallback(async (email: string, password: string, username?: string, fullName?: string) => {
-    const params: { emailAddress: string; password: string; username?: string; firstName?: string; lastName?: string } = {
-      emailAddress: email.trim(),
+    const { error } = await authClient.signIn.email({
+      email: email.trim(),
       password,
-    };
-    if (username) params.username = username;
-    if (fullName) {
-      const parts = fullName.trim().split(' ');
-      if (parts[0]) params.firstName = parts[0];
-      if (parts.length > 1) params.lastName = parts.slice(1).join(' ');
-    }
+    });
+    if (error) throw new Error(authMessage(error, 'Sign in failed'));
+  }, []);
 
-    const created = await clerkSignUp.create(params);
-    if (created.error) throw new Error(clerkMessage(created.error, 'Sign up failed'));
-
-    if (clerkSignUp.missingFields?.includes('username')) {
-      const auto =
-        email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20) || `user${Date.now().toString().slice(-4)}`;
-      const updated = await clerkSignUp.update({ username: auto });
-      if (updated.error) throw new Error(clerkMessage(updated.error, 'Could not finish sign up'));
-    }
-
-    if (clerkSignUp.status === 'complete') {
-      const finalized = await clerkSignUp.finalize();
-      if (finalized.error) throw new Error(clerkMessage(finalized.error, 'Could not start the session'));
+  const signUp = useCallback(
+    async (email: string, password: string, _username?: string, fullName?: string) => {
+      const name =
+        fullName?.trim() ||
+        email
+          .split('@')[0]
+          .replace(/[^a-zA-Z0-9 ]/g, ' ')
+          .trim() ||
+        'FaceTag user';
+      const { error } = await authClient.signUp.email({
+        email: email.trim(),
+        password,
+        name,
+      });
+      if (error) throw new Error(authMessage(error, 'Sign up failed'));
+      // Email verification is optional (RESEND). Accounts are usable immediately.
       return { needsVerification: false };
-    }
+    },
+    [],
+  );
 
-    const code = await clerkSignUp.verifications.sendEmailCode();
-    if (code.error) throw new Error(clerkMessage(code.error, 'Could not send the verification code'));
-    return { needsVerification: true };
-  }, [clerkSignUp]);
-
-  const verifySignUpEmail = useCallback(async (code: string) => {
-    const result = await clerkSignUp.verifications.verifyEmailCode({ code: code.trim() });
-    if (result.error) throw new Error(clerkMessage(result.error, 'Verification failed'));
-    if (clerkSignUp.status !== 'complete') {
-      const missing = clerkSignUp.missingFields?.join(', ') || clerkSignUp.status || 'unknown';
-      throw new Error(`Sign up is not finished yet (${missing}).`);
-    }
-    const finalized = await clerkSignUp.finalize();
-    if (finalized.error) throw new Error(clerkMessage(finalized.error, 'Could not start the session'));
-  }, [clerkSignUp]);
+  const verifySignUpEmail = useCallback(async (_code: string) => {
+    throw new Error('Email verification codes are not used. Check your inbox for a link if one was sent.');
+  }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    const { createdSessionId, setActive } = await startSSOFlow({ strategy: 'oauth_google' });
-    if (createdSessionId && setActive) {
-      await setActive({ session: createdSessionId });
-      return;
-    }
-    if (createdSessionId && clerk.loaded) {
-      await clerk.setActive({ session: createdSessionId });
-      return;
-    }
-    throw new Error('Google sign-in was cancelled.');
-  }, [clerk, startSSOFlow]);
+    const { error } = await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: '/(tabs)/scanner',
+    });
+    if (error) throw new Error(authMessage(error, 'Google sign-in failed'));
+  }, []);
 
   const requestPasswordReset = useCallback(async (email: string) => {
-    const created = await clerkSignIn.create({ identifier: email.trim() });
-    if (created.error) throw new Error(clerkMessage(created.error, 'Could not start password reset'));
-    const sent = await clerkSignIn.resetPasswordEmailCode.sendCode();
-    if (sent.error) throw new Error(clerkMessage(sent.error, 'Could not send the reset code'));
-  }, [clerkSignIn]);
+    const { error } = await authClient.requestPasswordReset({
+      email: email.trim(),
+      redirectTo: 'facetag://(auth)/login',
+    });
+    if (error) throw new Error(authMessage(error, 'Could not send the reset email'));
+  }, []);
 
-  const confirmPasswordReset = useCallback(async (code: string, password: string) => {
-    const verified = await clerkSignIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
-    if (verified.error) throw new Error(clerkMessage(verified.error, 'That code is not valid'));
-    const submitted = await clerkSignIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true });
-    if (submitted.error) throw new Error(clerkMessage(submitted.error, 'Could not set the new password'));
-    const finalized = await clerkSignIn.finalize();
-    if (finalized.error) throw new Error(clerkMessage(finalized.error, 'Could not start the session'));
-  }, [clerkSignIn]);
+  const confirmPasswordReset = useCallback(async (token: string, password: string) => {
+    const { error } = await authClient.resetPassword({
+      token: token.trim(),
+      newPassword: password,
+    });
+    if (error) throw new Error(authMessage(error, 'Could not set the new password'));
+  }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    if (!clerkUser) throw new Error('Sign in again before changing your password.');
-    await clerkUser.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: true });
-  }, [clerkUser]);
+    const { error } = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    });
+    if (error) throw new Error(authMessage(error, 'Could not change password'));
+  }, []);
 
   const signOut = useCallback(async () => {
     await storageDelete(USERNAME_KEY);
-    await clerkSignOut();
-  }, [clerkSignOut]);
+    await authClient.signOut();
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      isLoading: !isAuthLoaded || !isUserLoaded,
+      isLoading: session.isPending,
       signIn,
       signUp,
       verifySignUpEmail,
@@ -173,8 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
-      isAuthLoaded,
-      isUserLoaded,
+      session.isPending,
       signIn,
       signUp,
       verifySignUpEmail,

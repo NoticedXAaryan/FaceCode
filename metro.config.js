@@ -3,12 +3,12 @@ const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push('cjs');
 
-// sharp, Neon, and the Clerk backend SDK ship in this package for Vercel.
-// They must not be crawled or bundled into the Expo client.
+// Server-only packages for Vercel must not be crawled or bundled into the Expo client.
 const serverOnly = [
   /(?:^|[/\\])node_modules[/\\]sharp[/\\]/,
   /(?:^|[/\\])node_modules[/\\]@neondatabase[/\\]serverless[/\\]/,
-  /(?:^|[/\\])node_modules[/\\]@clerk[/\\]backend[/\\]/,
+  /(?:^|[/\\])node_modules[/\\]pg[/\\]/,
+  /(?:^|[/\\])node_modules[/\\]pg-native[/\\]/,
 ];
 
 const currentBlock = config.resolver.blockList;
@@ -23,10 +23,11 @@ if (currentBlock instanceof RegExp) {
 function isServerOnly(moduleName) {
   return (
     moduleName === 'sharp' ||
+    moduleName === 'pg' ||
+    moduleName === 'pg-native' ||
     moduleName === '@neondatabase/serverless' ||
-    moduleName === '@clerk/backend' ||
-    moduleName.startsWith('@clerk/backend/') ||
-    moduleName.startsWith('@neondatabase/serverless/')
+    moduleName.startsWith('@neondatabase/serverless/') ||
+    moduleName.startsWith('pg/')
   );
 }
 

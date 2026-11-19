@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts } from '@/constants/theme';
 
-const privacy = `FaceTag stores an account with Clerk and a public profile in our database.
+const privacy = `FaceTag stores an account with Better Auth (in your Neon database) and a public profile in the same database.
 
 When you enroll, the server turns a camera frame into a numeric face signature. The raw photo is not kept. The signature is used only to match a later scan to your profile.
 

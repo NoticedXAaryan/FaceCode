@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getPostAuthRoute } from '@/services/onboarding';
 import { colors, fonts } from '@/constants/theme';
 
-type Step = 'login' | 'forgot' | 'reset';
+type Step = 'login' | 'forgot' | 'reset' | 'sent';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -16,7 +16,7 @@ export default function LoginScreen() {
   const [step, setStep] = useState<Step>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
+  const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,14 +52,14 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSendCode = async () => {
+  const handleSendReset = async () => {
     setError('');
     setLoading(true);
     try {
       await requestPasswordReset(email);
-      setStep('reset');
+      setStep('sent');
     } catch (e: any) {
-      setError(e.message || 'Could not send a reset code.');
+      setError(e.message || 'Could not send a reset email.');
     } finally {
       setLoading(false);
     }
@@ -73,7 +73,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await confirmPasswordReset(code, password);
+      await confirmPasswordReset(token, password);
       await finishAuth();
     } catch (e: any) {
       setError(e.message || 'Could not reset the password.');
@@ -82,13 +82,22 @@ export default function LoginScreen() {
     }
   };
 
-  const title = step === 'login' ? 'Welcome back' : step === 'forgot' ? 'Reset password' : 'Choose a new password';
+  const title =
+    step === 'login'
+      ? 'Welcome back'
+      : step === 'forgot'
+        ? 'Reset password'
+        : step === 'sent'
+          ? 'Check your email'
+          : 'Choose a new password';
   const subtitle =
     step === 'forgot'
-      ? 'We will email you a code.'
-      : step === 'reset'
-        ? `Enter the code sent to ${email}`
-        : 'Sign in to scan and share your card.';
+      ? 'We will email you a reset link.'
+      : step === 'sent'
+        ? `If an account exists for ${email}, a reset link is on the way. Set RESEND_API_KEY on the server to deliver mail.`
+        : step === 'reset'
+          ? 'Paste the token from your reset email, then choose a new password.'
+          : 'Sign in to scan and share your card.';
 
   return (
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -105,7 +114,7 @@ export default function LoginScreen() {
               <View style={s.dividerLine} />
             </View>
           ) : null}
-          {step !== 'reset' ? (
+          {step === 'login' || step === 'forgot' ? (
             <TextInput
               style={s.input}
               placeholder="Email"
@@ -117,18 +126,19 @@ export default function LoginScreen() {
               autoCorrect={false}
               accessibilityLabel="Email"
             />
-          ) : (
+          ) : null}
+          {step === 'reset' ? (
             <TextInput
               style={s.input}
-              placeholder="Verification code"
+              placeholder="Reset token"
               placeholderTextColor={colors.textTertiary}
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              accessibilityLabel="Reset code"
+              value={token}
+              onChangeText={setToken}
+              autoCapitalize="none"
+              accessibilityLabel="Reset token"
             />
-          )}
-          {step !== 'forgot' ? (
+          ) : null}
+          {step === 'login' || step === 'reset' ? (
             <TextInput
               style={s.input}
               placeholder={step === 'reset' ? 'New password' : 'Password'}
@@ -139,25 +149,45 @@ export default function LoginScreen() {
               accessibilityLabel="Password"
             />
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            onPress={step === 'login' ? handleLogin : step === 'forgot' ? handleSendCode : handleReset}
-            disabled={loading || googleLoading}
-          >
-            <LinearGradient colors={[colors.accentFrom, colors.accentTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.button}>
-              <Text style={s.buttonText}>
-                {loading ? 'Please wait…' : step === 'login' ? 'Sign in' : step === 'forgot' ? 'Send code' : 'Update password'}
-              </Text>
-            </LinearGradient>
-          </Pressable>
+          {step !== 'sent' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={step === 'login' ? handleLogin : step === 'forgot' ? handleSendReset : handleReset}
+              disabled={loading || googleLoading}
+            >
+              <LinearGradient colors={[colors.accentFrom, colors.accentTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.button}>
+                <Text style={s.buttonText}>
+                  {loading
+                    ? 'Please wait…'
+                    : step === 'login'
+                      ? 'Sign in'
+                      : step === 'forgot'
+                        ? 'Send reset link'
+                        : 'Update password'}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          ) : null}
           {error ? <Text style={s.error}>{error}</Text> : null}
           {step === 'login' ? (
-            <Pressable accessibilityRole="button" onPress={() => { setError(''); setStep('forgot'); }}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setError('');
+                setStep('forgot');
+              }}
+            >
               <Text style={s.forgot}>Forgot password?</Text>
             </Pressable>
           ) : (
-            <Pressable accessibilityRole="button" onPress={() => { setError(''); setStep('login'); }}>
-              <Text style={s.forgot}>Back to sign in</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setError('');
+                setStep(step === 'sent' ? 'reset' : 'login');
+              }}
+            >
+              <Text style={s.forgot}>{step === 'sent' ? 'I already have a token' : 'Back to sign in'}</Text>
             </Pressable>
           )}
         </View>

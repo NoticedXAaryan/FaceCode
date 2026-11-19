@@ -2,7 +2,7 @@
 
 FaceTag turns your face into a personal link card. You enroll once, choose what people can open, and anyone with the app can scan you the way they would scan a QR code.
 
-It is an Expo Router app with Clerk for sign-in and a Neon Postgres API deployed as Vercel functions.
+It is an Expo Router app with Better Auth for sign-in and a Neon Postgres API deployed as Vercel functions.
 
 ## What you can do
 
@@ -22,9 +22,9 @@ For a stronger model, set `FACE_EMBEDDING_URL` to an endpoint that accepts `{ "i
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Create a [Clerk](https://dashboard.clerk.com) application. Enable email/password and, if you want the Google button, the Google social connection. Put the publishable key in `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the secret in `CLERK_SECRET_KEY` on the server.
-3. Create a [Neon](https://neon.tech) database and run `api/_lib/schema.sql` in the SQL editor. Put the connection string in `DATABASE_URL`.
-4. Deploy to Vercel (`npm run deploy`). The project serves the API functions and the exported web app from `dist/`. Set `EXPO_PUBLIC_API_URL` to that origin.
+2. Create a [Neon](https://neon.tech) database and run `api/_lib/schema.sql` in the SQL editor (includes Better Auth tables). Put the connection string in `DATABASE_URL`.
+3. Set `BETTER_AUTH_SECRET` (32+ random bytes). Optionally set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and `RESEND_API_KEY` for Google sign-in and password-reset email.
+4. Deploy to Vercel (`npm run deploy`). The project serves the API functions and the exported web app from `dist/`. Set `EXPO_PUBLIC_API_URL` (and optionally `BETTER_AUTH_URL`) to that origin.
 5. Install and start:
 
 ```bash
@@ -40,6 +40,7 @@ Open the project in Expo Go, an emulator, or the web build (`npm run web`).
 | --- | --- |
 | `npm run dev` | Start Expo |
 | `npm test` | Face-signature and profile unit tests |
+| `npm run test:robot` | Robot Framework acceptance suites (logic, build, live API, mock API, web) |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
 | `npm run export:web` | Static web bundle in `dist/` |
@@ -49,6 +50,10 @@ Open the project in Expo Go, an emulator, or the web build (`npm run web`).
 | `npm run submit:android` | Submit the production Android build |
 | `npx expo-doctor` | Expo SDK dependency check |
 | `npm run deploy` | Production Vercel deploy |
+
+## Acceptance tests
+
+[Robot Framework](https://github.com/robotframework/robotframework#usage) suites live in `robot/suites`. Install Python deps once (`pip install -r robot/requirements.txt`), export the web app if you want the Selenium suite (`npm run export:web`), then run `npm run test:robot`. Reports are written to `results/`.
 
 ## Store builds
 
@@ -60,9 +65,7 @@ The iOS bundle id and Android package are `com.facetag.app`. Confirm that id bef
 
 Splash, onboarding, sign in, sign up, face enrollment, profile setup, scanner, your profile, settings, a public profile, and in-app privacy and terms.
 
-Until `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is set, the app stops on a setup screen instead of crashing:
-
-![FaceTag waiting for a Clerk key](docs/screenshots/setup.png)
+Auth lives at `/api/auth/*` on the same Vercel deployment. The Expo client talks to it through Better Auth’s Expo plugin and stores the session cookie in SecureStore (or localStorage on web).
 
 ## Privacy
 
